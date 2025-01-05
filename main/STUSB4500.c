@@ -1,13 +1,21 @@
 #include "esp_log.h"
+#include <esp_check.h>
+#include <driver/gpio.h>
 
 #include "STUSB4500.h"
 #include "i2c_bitaxe.h"
 
 #define STUSB4500_I2CADDR_DEFAULT 0x28
+#define ALERT_PIN 22
 
 static i2c_master_dev_handle_t emc2101_dev_handle;
 
 static const char * TAG = "STUSB4500";
+
+static void alert_isr_handler(void *arg)
+{
+
+}
 
 esp_err_t STUSB4500_init()
 {
@@ -15,5 +23,17 @@ esp_err_t STUSB4500_init()
         ESP_LOGE(TAG, "Failed to add device");
         return ESP_FAIL;
     }
-    return 0;
+
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << ALERT_PIN),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .intr_type = GPIO_INTR_NEGEDGE,
+    };
+    gpio_config(&io_conf);
+
+    ESP_RETURN_ON_ERROR(gpio_isr_handler_add(ALERT_PIN, alert_isr_handler, NULL), TAG, "adding ISR handler");
+
+
+    return ESP_OK;
 }
