@@ -53,6 +53,13 @@ menu "Bitaxe Configuration"
         default 250
         help
             The BM1397 hash frequency
+
+    config STUSB4500
+        bool "Support for STUSB4500 driver"
+        default n
+        help
+            Say y here if your board has a STUSB4500
+
 endmenu
 
 menu "Stratum Configuration"

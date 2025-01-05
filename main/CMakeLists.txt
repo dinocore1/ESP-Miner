@@ -53,6 +53,10 @@ PRIV_REQUIRES
     "esp_driver_i2c"
 )
 
+if(CONFIG_STUSB4500)
+    target_sources(${COMPONENT_TARGET} PRIVATE "STUSB4500.c")
+endif()
+
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_INCLUDE_SIMPLE=1" APPEND)
 idf_build_set_property(COMPILE_OPTIONS "-DLV_CONF_PATH= ${CMAKE_SOURCE_DIR}/main/lv_conf.h" APPEND)
 
