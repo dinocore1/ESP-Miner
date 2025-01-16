@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include <driver/gpio.h>
 #include <esp_check.h>
 #include <esp_log.h>
@@ -45,6 +47,43 @@ static void alert_isr_handler(void * arg)
 static void set_PDOSnk_count(uint8_t const count)
 {
     i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_DPM_PDO_NUM, count);
+}
+
+static void sort_pdo()
+{
+    struct src_pdo_sort {
+        uint8_t idx,
+        uint16_t milli_volts,
+        uint16_t milli_amps,
+    };
+
+    struct src_pd_sort my_list[10];
+
+    for (int i=0;i<num_src_pdo;i++) {
+        uint16_t milli_volts;
+        uint16_t milli_amps;
+
+        switch(src_pdo[i].fix.FixedSupply) {
+            case 0:
+                // fixed supply
+                milli_volts = src_pdo[i].fix.Voltage * 50;
+                milli_amps = src_pdo[i].fix.Max_Operating_Current * 10; 
+                break;
+
+            case 1:
+                // Variable supply
+                milli_volts = MIN(src_pdo[i].var.Min_Voltage, src_pdo[i].var.Max_Voltage) * 50;
+                milli_amps = src_pdf[i].var.Operating_Current * 10;
+                break;
+        }
+        my_list[i] = {
+            .idx = i,
+            .milli_volts = src_pdo[i].
+        }
+    }
+
+
+
 }
 
 static void stusb4500_task(void * params)
