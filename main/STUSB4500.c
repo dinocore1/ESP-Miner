@@ -151,10 +151,14 @@ static void read_status_registers()
                       "reading status reg");
     status.d8 = scratch[0] & ~scratch[1];
 
+    ESP_LOGD(TAG, "ALERT_STATUS: 0x%x", status.d8);
+
     if (status.b.PRT_STATUS_AL) {
 
         ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PRT_STATUS, &PRT_status.d8, 1), exit, TAG,
                           "reading PRT_status reg");
+
+        ESP_LOGD(TAG, "PRT_STATUS: 0x%x", PRT_status.d8);
 
         if (PRT_status.b.MSG_RECEIVED) {
             USBPD_MsgHeader_TypeDef header;
@@ -162,6 +166,8 @@ static void read_status_registers()
             ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_RX_HEADER, scratch, 2), exit, TAG,
                               "reading RX_HEADER");
             header.d16 = LE16(&scratch[0]);
+
+            ESP_LOGD(TAG, "RX_HEADER: 0x%x", header.d16);
 
             if (header.b.NumberOfDataObjects > 0) {
                 switch (header.b.MessageType) {
@@ -172,6 +178,7 @@ static void read_status_registers()
 
                     for (int i = 0; i < header.b.NumberOfDataObjects; i++) {
                         sSourcePDOs[i].d32 = LE32(&scratch[i * 4]);
+                        ESP_LOGD(TAG, "RX_DATA_OBJ[%d]: 0x%x", i, sSourcePDOs[i].d32);
                     }
                     sNumSourcePDOsAvailable = header.b.NumberOfDataObjects;
 
@@ -223,11 +230,6 @@ static void stusb4500_task(void * params)
             read_status_registers();
         }
 
-        while (ulNotifiedValue > 0) {
-            ulNotifiedValue--;
-
-            read_status_registers();
-        }
     }
 }
 
