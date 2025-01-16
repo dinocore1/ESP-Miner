@@ -21,6 +21,7 @@
 #include "vcore.h"
 #include "utils.h"
 #include "TPS546.h"
+#include "esp_psram.h"
 
 #define GPIO_ASIC_ENABLE CONFIG_GPIO_ASIC_ENABLE
 
@@ -288,6 +289,15 @@ esp_err_t test_init_peripherals(GlobalState * GLOBAL_STATE) {
     return ESP_OK;
 }
 
+esp_err_t test_psram(GlobalState * GLOBAL_STATE){
+    if(!esp_psram_is_initialized()) {
+        ESP_LOGE(TAG, "No PSRAM available on ESP32!");
+        display_msg("PSRAM:FAIL", GLOBAL_STATE);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
 /**
  * @brief Perform a self-test of the system.
  *
@@ -303,6 +313,12 @@ void self_test(void * pvParameters)
     ESP_LOGI(TAG, "Running Self Tests");
 
     GLOBAL_STATE->SELF_TEST_MODULE.active = true;
+
+    //Run PSRAM test
+    if(test_psram(GLOBAL_STATE) != ESP_OK) {
+        ESP_LOGE(TAG, "NO PSRAM on device!");
+        tests_done(GLOBAL_STATE, TESTS_FAILED);
+    }
 
     //Run display tests
     if (test_display(GLOBAL_STATE) != ESP_OK) {
@@ -503,12 +519,6 @@ void self_test(void * pvParameters)
 
 static void tests_done(GlobalState * GLOBAL_STATE, bool test_result) 
 {
-    if (test_result == TESTS_PASSED) {
-        ESP_LOGI(TAG, "SELF TESTS PASS -- Press RESET to continue");
-    } else {
-        ESP_LOGI(TAG, "SELF TESTS FAIL -- Press RESET to continue");
-    }
-    
     switch (GLOBAL_STATE->device_model) {
         case DEVICE_MAX:
         case DEVICE_ULTRA:
@@ -520,6 +530,10 @@ static void tests_done(GlobalState * GLOBAL_STATE, bool test_result)
         default:
     }
 
-    //wait here for a long press to reboot
-    vTaskDelay(portMAX_DELAY);
+    if (test_result != TESTS_PASSED) {
+        ESP_LOGI(TAG, "SELF TESTS FAIL -- Press RESET to continue");  
+        //wait here for a long press to reboot
+        vTaskDelay(portMAX_DELAY);
+    }
+
 }
