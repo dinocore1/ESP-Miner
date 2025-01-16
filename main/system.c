@@ -30,10 +30,6 @@
 #include "screen.h"
 #include "vcore.h"
 
-#ifdef CONFIG_STUSB4500
-#include "STUSB4500.h"
-#endif //CONFIG_STUSB4500
-
 static const char * TAG = "SystemModule";
 
 static void _suffix_string(uint64_t, char *, size_t, int);
@@ -90,13 +86,6 @@ void SYSTEM_init_system(GlobalState * GLOBAL_STATE)
 }
 
 void SYSTEM_init_peripherals(GlobalState * GLOBAL_STATE) {
-
-#ifdef CONFIG_STUSB4500
-
-    STUSB4500_init();
-
-#endif // CONFIG_STUSB4500
-
 
     // Initialize the core voltage regulator
     VCORE_init(GLOBAL_STATE);

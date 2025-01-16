@@ -11,6 +11,9 @@
 
 #include "STUSB4500_def.h"
 
+#define max(a,b) ((a) > (b) ? (a) : (b))
+#define min(a,b) ((a) < (b) ? (a) : (b))
+
 #define STUSB4500_I2CADDR_DEFAULT 0x28
 #define ALERT_PIN 22
 
@@ -52,12 +55,12 @@ static void set_PDOSnk_count(uint8_t const count)
 static void sort_pdo()
 {
     struct src_pdo_sort {
-        uint8_t idx,
-        uint16_t milli_volts,
-        uint16_t milli_amps,
+        uint8_t idx;
+        uint16_t milli_volts;
+        uint16_t milli_amps;
     };
 
-    struct src_pd_sort my_list[10];
+    struct src_pdo_sort my_list[10];
 
     for (int i=0;i<num_src_pdo;i++) {
         uint16_t milli_volts;
@@ -72,14 +75,12 @@ static void sort_pdo()
 
             case 1:
                 // Variable supply
-                milli_volts = MIN(src_pdo[i].var.Min_Voltage, src_pdo[i].var.Max_Voltage) * 50;
-                milli_amps = src_pdf[i].var.Operating_Current * 10;
+                milli_volts = min(src_pdo[i].var.Min_Voltage, src_pdo[i].var.Max_Voltage) * 50;
+                milli_amps = src_pdo[i].var.Operating_Current * 10;
                 break;
         }
-        my_list[i] = {
-            .idx = i,
-            .milli_volts = src_pdo[i].
-        }
+        my_list[i].idx = i;
+        my_list[i].milli_volts = milli_volts;
     }
 
 
@@ -144,6 +145,7 @@ static void stusb4500_task(void * params)
 
 esp_err_t STUSB4500_init()
 {
+    ESP_LOGI(TAG, "Initializing STUSB4500");
     if (i2c_bitaxe_add_device(STUSB4500_I2CADDR_DEFAULT, &stusb4500_dev_handle, TAG) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to add device");
         return ESP_FAIL;

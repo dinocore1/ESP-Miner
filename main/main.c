@@ -1,6 +1,8 @@
 
-#include "esp_event.h"
-#include "esp_log.h"
+#include <esp_event.h>
+#include <esp_log.h>
+#include <esp_err.h>
+#include <esp_check.h>
 #include "nvs_flash.h"
 
 // #include "protocol_examples_common.h"
@@ -20,6 +22,12 @@
 #include "nvs_device.h"
 #include "self_test.h"
 
+#define ESP_INTR_FLAG_DEFAULT  0
+
+#ifdef CONFIG_STUSB4500
+#include "STUSB4500.h"
+#endif //CONFIG_STUSB4500
+
 static GlobalState GLOBAL_STATE = {
     .extranonce_str = NULL, 
     .extranonce_2_len = 0, 
@@ -34,6 +42,9 @@ void app_main(void)
 {
     ESP_LOGI(TAG, "Welcome to the bitaxe - hack the planet!");
 
+    // Install ISR service and hook the interrupt handler
+    ESP_RETURN_VOID_ON_ERROR(gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT), TAG, "Error installing ISR service");
+
     // Init I2C
     ESP_ERROR_CHECK(i2c_bitaxe_init());
     ESP_LOGI(TAG, "I2C initialized successfully");
@@ -43,6 +54,10 @@ void app_main(void)
 
     //Init ADC
     ADC_init();
+
+#ifdef CONFIG_STUSB4500
+    STUSB4500_init();
+#endif // CONFIG_STUSB4500
 
     //initialize the ESP32 NVS
     if (NVSDevice_init() != ESP_OK){
