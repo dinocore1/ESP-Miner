@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <string.h>
+#include <esp_check.h>
 #include "esp_log.h"
 #include "pmbus_commands.h"
 
@@ -327,22 +328,22 @@ int TPS546_init(void)
     int temp;
     uint8_t comp_config[5];
     uint8_t voutmode;
+    esp_err_t ret;
 
     ESP_LOGI(TAG, "Initializing the core voltage regulator");
 
-    if (i2c_bitaxe_add_device(TPS546_I2CADDR, &tps546_dev_handle, TAG) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to add I2C device");
-        return -1;
-    }
+    ESP_GOTO_ON_ERROR(i2c_bitaxe_add_device(TPS546_I2CADDR, &tps546_dev_handle, TAG) != ESP_OK, err, TAG, "Failed to add I2C device");
 
     /* Establish communication with regulator */
-    smb_read_block(PMBUS_IC_DEVICE_ID, data, 6); //the DEVICE_ID block first byte is the length.
+    //the DEVICE_ID block first byte is the length.
+    ESP_GOTO_ON_ERROR(smb_read_block(PMBUS_IC_DEVICE_ID, data, 6), err, TAG, "reading PMBUS_IC_DEVICE_ID");
+
     ESP_LOGI(TAG, "Device ID: %02x %02x %02x %02x %02x %02x", data[0], data[1], data[2], data[3], data[4], data[5]);
     /* There's 3 different known device IDs observed so far */
     if ( (memcmp(data, DEVICE_ID1, 6) != 0) && (memcmp(data, DEVICE_ID2, 6) != 0) && (memcmp(data, DEVICE_ID3, 6) != 0))
     {
         ESP_LOGE(TAG, "Cannot find TPS546 regulator - Device ID mismatch");
-        return -1;
+        goto err;
     }
 
     /* Make sure power is turned off until commanded */
@@ -415,6 +416,9 @@ int TPS546_init(void)
         comp_config[2], comp_config[3], comp_config[4]);
 
     return 0;
+
+    err:
+        return -1;
 }
 
 /**
