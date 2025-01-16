@@ -15,7 +15,7 @@
 #define min(a,b) ((a) < (b) ? (a) : (b))
 
 #define STUSB4500_I2CADDR_DEFAULT 0x28
-#define ALERT_PIN 22
+#define ALERT_PIN 14
 
 #define LE16(addr) (((uint16_t) (*((uint8_t *) (addr)))) + (((uint16_t) (*(((uint8_t *) (addr)) + 1))) << 8))
 
@@ -145,11 +145,18 @@ static void stusb4500_task(void * params)
 
 esp_err_t STUSB4500_init()
 {
+    uint8_t device_id;
+
     ESP_LOGI(TAG, "Initializing STUSB4500");
     if (i2c_bitaxe_add_device(STUSB4500_I2CADDR_DEFAULT, &stusb4500_dev_handle, TAG) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to add device");
         return ESP_FAIL;
     }
+
+    ESP_RETURN_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_DEVICE_ID, &device_id, 1), TAG, "reading device id");
+    ESP_LOGI(TAG, "device id: 0x%x", device_id);
+    ESP_RETURN_ON_FALSE(device_id == 0x25, ESP_FAIL, TAG, "device id mismatch expecting 0x25");
+
 
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << ALERT_PIN),
