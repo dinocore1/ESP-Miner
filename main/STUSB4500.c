@@ -11,8 +11,8 @@
 
 #include "STUSB4500_def.h"
 
-#define max(a,b) ((a) > (b) ? (a) : (b))
-#define min(a,b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
+#define min(a, b) ((a) < (b) ? (a) : (b))
 
 #define STUSB4500_I2CADDR_DEFAULT 0x28
 #define ALERT_PIN 14
@@ -34,8 +34,8 @@ static const UBaseType_t xArrayIndex = 0;
 
 static STUSB_GEN1S_ALERT_STATUS_RegTypeDef status;
 static STUSB_GEN1S_PRT_STATUS_RegTypeDef PRT_status;
-static uint8_t num_src_pdo;
-static USB_PD_SRC_PDOTypeDef src_pdo[7];
+static uint8_t sNumSourcePDOsAvailable;
+static USB_PD_SRC_PDOTypeDef sSourcePDOs[7];
 
 static void stusb4500_task(void * params);
 
@@ -47,44 +47,141 @@ static void alert_isr_handler(void * arg)
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-static void set_PDOSnk_count(uint8_t const count)
+static void stusb4500_setPDOCount(uint8_t const count)
 {
     i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_DPM_PDO_NUM, count);
 }
 
-static void sort_pdo()
+static void stusb4500_softReset()
 {
-    struct src_pdo_sort {
-        uint8_t idx;
-        uint16_t milli_volts;
-        uint16_t milli_amps;
-    };
+    // SOFT_RESET
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_TX_HEADER_LOW, 0x0D);
 
+    // SEND_COMMAND
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_PD_COMMAND_CTRL, 0x26);
+}
+
+static void stusb4500_writePDO(uint8_t pdo_num, USB_PD_SRC_PDOTypeDef pdo)
+{
+    uint8_t buffer[5];
+
+    buffer[0] = 0x85 + (pdo_num * 4);
+    buffer[1] = (pdo.d32 >> 0) & 0xFF;
+    buffer[2] = (pdo.d32 >> 8) & 0xFF;
+    buffer[3] = (pdo.d32 >> 16) & 0xFF;
+    buffer[4] = (pdo.d32 >> 24) & 0xFF;
+
+    if (i2c_bitaxe_register_write_bytes(stusb4500_dev_handle, buffer, 5) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to write PDO");
+    }
+}
+
+static USB_PD_SRC_PDOTypeDef stusb4500_createFixedPDO(uint16_t milli_volts, uint16_t milli_amps)
+{
+    USB_PD_SRC_PDOTypeDef retval.d32 = 0;
+
+    retval.fix.Voltage = milli_volts / 50;
+    retval.fix.Max_Operating_Current = milli_amps / 10;
+
+    return retval;
+}
+
+struct src_pdo_sort
+{
+    uint8_t idx;
+    uint16_t milli_volts;
+    uint16_t milli_amps;
+};
+
+int pdo_sort_cmp(const void * a, const void * b)
+{
+    int ret;
+    struct src_pdo_sort * pdoa = (struct src_pdo_sort *) a;
+    struct src_pdo_sort * pdob = (struct src_pdo_sort *) b;
+
+    int a_watts = (int) pdoa->milli_volts * (int) pdoa->milli_amps;
+    int b_watts = (int) pdob->milli_volts * (int) pdob->milli_amps;
+
+    ret = b_watts - a_watts;
+    if (ret == 0) {
+        // sort by secondary key: lowest voltage
+        ret = pdoa->milli_volts - pdob->milli_volts;
+    }
+
+    return ret;
+}
+
+static int sort_pdo()
+{
     struct src_pdo_sort my_list[10];
 
-    for (int i=0;i<num_src_pdo;i++) {
+    for (int i = 0; i < sNumSourcePDOsAvailable; i++) {
         uint16_t milli_volts;
         uint16_t milli_amps;
 
-        switch(src_pdo[i].fix.FixedSupply) {
-            case 0:
-                // fixed supply
-                milli_volts = src_pdo[i].fix.Voltage * 50;
-                milli_amps = src_pdo[i].fix.Max_Operating_Current * 10; 
-                break;
+        switch (sSourcePDOs[i].fix.FixedSupply) {
+        case 0:
+            // fixed supply
+            milli_volts = sSourcePDOs[i].fix.Voltage * 50;
+            milli_amps = sSourcePDOs[i].fix.Max_Operating_Current * 10;
+            break;
 
-            case 1:
-                // Variable supply
-                milli_volts = min(src_pdo[i].var.Min_Voltage, src_pdo[i].var.Max_Voltage) * 50;
-                milli_amps = src_pdo[i].var.Operating_Current * 10;
-                break;
+        case 1:
+            // Variable supply
+            milli_volts = min(sSourcePDOs[i].var.Min_Voltage, sSourcePDOs[i].var.Max_Voltage) * 50;
+            milli_amps = sSourcePDOs[i].var.Operating_Current * 10;
+            break;
         }
         my_list[i].idx = i;
         my_list[i].milli_volts = milli_volts;
     }
 
+    qsort(my_list, sNumSourcePDOsAvailable, sizeof(struct src_pdo_sort), pdo_sort_cmp);
 
+    return my_list[0].idx;
+}
 
+static void read_status_registers()
+{
+    uint8_t scratch[40];
+
+    ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_ALERT_STATUS_1, scratch, 2), exit, TAG,
+                      "reading status reg");
+    status.d8 = scratch[0] & ~scratch[1];
+
+    if (status.b.PRT_STATUS_AL) {
+
+        ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PRT_STATUS, &PRT_status.d8, 1), exit, TAG,
+                          "reading PRT_status reg");
+
+        if (PRT_status.b.MSG_RECEIVED) {
+            USBPD_MsgHeader_TypeDef header;
+
+            ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_RX_HEADER, scratch, 2), exit, TAG,
+                              "reading RX_HEADER");
+            header.d16 = LE16(&scratch[0]);
+
+            if (header.b.NumberOfDataObjects > 0) {
+                switch (header.b.MessageType) {
+                case 0x01:
+                    ESP_GOTO_ON_ERROR(
+                        i2c_bitaxe_register_read(stusb4500_dev_handle, REG_RX_DATA_OBJ, scratch, header.b.NumberOfDataObjects * 4),
+                        exit, TAG, "read RX_DATA_OBJ");
+
+                    for (int i = 0; i < header.b.NumberOfDataObjects; i++) {
+                        sSourcePDOs[i].d32 = LE32(&scratch[i * 4]);
+                    }
+                    sNumSourcePDOsAvailable = header.b.NumberOfDataObjects;
+
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+    }
+
+exit:
 }
 
 static void stusb4500_task(void * params)
@@ -102,43 +199,7 @@ static void stusb4500_task(void * params)
         while (ulNotifiedValue > 0) {
             ulNotifiedValue--;
 
-            ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_ALERT_STATUS_1, scratch, 2), err, TAG,
-                              "reading status reg");
-            status.d8 = scratch[0] & ~scratch[1];
-
-            if (status.b.PRT_STATUS_AL) {
-
-                ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PRT_STATUS, &PRT_status.d8, 1), err, TAG,
-                                  "reading PRT_status reg");
-
-                if (PRT_status.b.MSG_RECEIVED) {
-                    USBPD_MsgHeader_TypeDef header;
-
-                    ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_RX_HEADER, scratch, 2), err, TAG,
-                                      "reading RX_HEADER");
-                    header.d16 = LE16(&scratch[0]);
-
-                    if (header.b.NumberOfDataObjects > 0) {
-                        switch (header.b.MessageType) {
-                        case 0x01:
-                            ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_RX_DATA_OBJ, scratch,
-                                                                       header.b.NumberOfDataObjects * 4),
-                                              err, TAG, "read RX_DATA_OBJ");
-
-                            for (int i = 0; i < header.b.NumberOfDataObjects; i++) {
-                                src_pdo[i].d32 = LE32(&scratch[i * 4]);
-                            }
-                            num_src_pdo = header.b.NumberOfDataObjects;
-
-                            break;
-                        default:
-                            break;
-                        }
-                    }
-                }
-            }
-
-        err:
+            read_status_registers();
         }
     }
 }
@@ -146,6 +207,8 @@ static void stusb4500_task(void * params)
 esp_err_t STUSB4500_init()
 {
     uint8_t device_id;
+
+    sNumSourcePDOsAvailable = 0;
 
     ESP_LOGI(TAG, "Initializing STUSB4500");
     if (i2c_bitaxe_add_device(STUSB4500_I2CADDR_DEFAULT, &stusb4500_dev_handle, TAG) != ESP_OK) {
@@ -156,7 +219,6 @@ esp_err_t STUSB4500_init()
     ESP_RETURN_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_DEVICE_ID, &device_id, 1), TAG, "reading device id");
     ESP_LOGI(TAG, "device id: 0x%x", device_id);
     ESP_RETURN_ON_FALSE(device_id == 0x25, ESP_FAIL, TAG, "device id mismatch expecting 0x25");
-
 
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << ALERT_PIN),
@@ -170,7 +232,8 @@ esp_err_t STUSB4500_init()
 
     xTaskCreate(stusb4500_task, TAG, 4096, NULL, 10, &taskHandle);
 
-    set_PDOSnk_count(1);
+    stusb4500_createFixedPDO(5000, 500);
+    stusb4500_setPDOCount(1);
 
     // clear all interrupts by reading all 10 registers from 0x0d to 0x16
     for (uint8_t reg_addr = 0x0d; reg_addr < 0x16; reg_addr++) {

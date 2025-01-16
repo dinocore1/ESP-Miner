@@ -3,10 +3,12 @@
 
 #define REG_ALERT_STATUS_1 0x0B
 #define REG_PRT_STATUS 0x16
+#define REG_PD_COMMAND_CTRL 0x1A
 #define REG_DPM_PDO_NUM 0x70
 #define REG_DEVICE_ID 0x2f
 #define REG_RX_HEADER 0x31
 #define REG_RX_DATA_OBJ 0x33
+#define REG_TX_HEADER_LOW 0x51
 
 typedef union
 {
