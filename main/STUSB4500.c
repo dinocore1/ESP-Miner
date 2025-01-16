@@ -6,6 +6,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <async.h>
+
 #include "STUSB4500.h"
 #include "i2c_bitaxe.h"
 
@@ -16,6 +18,9 @@
 
 #define STUSB4500_I2CADDR_DEFAULT 0x28
 #define ALERT_PIN 14
+
+#define TASK_NOTIFY_ISR_ALART (1 << 0)
+#define TASK_NOTIFY_OTHER (1 << 1)
 
 #define LE16(addr) (((uint16_t) (*((uint8_t *) (addr)))) + (((uint16_t) (*(((uint8_t *) (addr)) + 1))) << 8))
 
@@ -29,9 +34,6 @@ static const char * TAG = "STUSB4500";
 
 static TaskHandle_t taskHandle = NULL;
 
-// The index within the target task's array of task notifications to use.
-static const UBaseType_t xArrayIndex = 0;
-
 static STUSB_GEN1S_ALERT_STATUS_RegTypeDef status;
 static STUSB_GEN1S_PRT_STATUS_RegTypeDef PRT_status;
 static uint8_t sNumSourcePDOsAvailable;
@@ -43,7 +45,7 @@ static void alert_isr_handler(void * arg)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    vTaskNotifyGiveFromISR(taskHandle, &xHigherPriorityTaskWoken);
+    xTaskNotifyFromISR(taskHandle, TASK_NOTIFY_ISR_ALART, eSetBits, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
@@ -111,7 +113,7 @@ int pdo_sort_cmp(const void * a, const void * b)
     return ret;
 }
 
-static int sort_pdo()
+static struct src_pdo_sort sort_pdo()
 {
     struct src_pdo_sort my_list[10];
 
@@ -138,7 +140,7 @@ static int sort_pdo()
 
     qsort(my_list, sNumSourcePDOsAvailable, sizeof(struct src_pdo_sort), pdo_sort_cmp);
 
-    return my_list[0].idx;
+    return my_list[0];
 }
 
 static void read_status_registers()
@@ -184,17 +186,42 @@ static void read_status_registers()
 exit:
 }
 
+static async run(struct async* pt)
+{
+    struct src_pdo_sort pdo;
+    USB_PD_SRC_PDOTypeDef pdo_usbpd;
+
+    async_begin(pt);
+
+    await(sNumSourcePDOsAvailable > 0);
+
+    pdo = sort_pdo();
+    pdo_usbpd = stusb4500_createFixedPDO(pdo.milli_volts, pdo.milli_amps);
+    stusb4500_writePDO(1, pdo_usbpd);
+    stusb4500_setPDOCount(2);
+    stusb4500_softReset();
+
+    async_end;
+}
+
 static void stusb4500_task(void * params)
 {
     const TickType_t xBlockTime = pdMS_TO_TICKS(500);
     uint32_t ulNotifiedValue;
     esp_err_t ret;
+    struct async run_task;
 
-    uint8_t scratch[40];
+    async_init(&run_task);
 
     for (;;) {
 
-        ulNotifiedValue = ulTaskNotifyTakeIndexed(xArrayIndex, pdTRUE, xBlockTime);
+        run(&run_task);
+
+        ulNotifiedValue = ulTaskNotifyTake(pdTRUE, xBlockTime);
+
+        if (ulNotifiedValue & TASK_NOTIFY_ISR_ALART) {
+            read_status_registers();
+        }
 
         while (ulNotifiedValue > 0) {
             ulNotifiedValue--;
