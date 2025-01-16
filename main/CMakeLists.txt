@@ -87,7 +87,7 @@ else()
         BUILD_ALWAYS OFF
         BUILD_IN_SOURCE TRUE
         BUILD_BYPRODUCTS
-            "${WEB_SRC_DIR}/dist/axe-os/index.html"
+            "${WEB_SRC_DIR}/dist/axe-os/index.html.gz"
     )
 
     add_dependencies(${COMPONENT_LIB} web_ui_dist)
