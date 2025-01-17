@@ -137,6 +137,7 @@ static struct src_pdo_sort sort_pdo()
             break;
 
         default:
+            ESP_LOGW(TAG, "unhandled PDO type: %d", sSourcePDOs[i].fix.FixedSupply);
             milli_volts = 0;
             milli_amps = 0;
             break;
@@ -271,12 +272,6 @@ esp_err_t STUSB4500_init()
 
     stusb4500_createFixedPDO(5000, 500);
     stusb4500_setPDOCount(1);
-
-    // clear all interrupts by reading all 10 registers from 0x0d to 0x16
-    for (uint8_t reg_addr = 0x0d; reg_addr < 0x16; reg_addr++) {
-        uint8_t read_buf[1];
-        i2c_bitaxe_register_read(stusb4500_dev_handle, reg_addr, read_buf, 1);
-    }
 
     return ESP_OK;
 }
