@@ -80,7 +80,9 @@ static void stusb4500_writePDO(uint8_t pdo_num, USB_PD_SRC_PDOTypeDef pdo)
 
 static USB_PD_SRC_PDOTypeDef stusb4500_createFixedPDO(uint16_t milli_volts, uint16_t milli_amps)
 {
-    USB_PD_SRC_PDOTypeDef retval.d32 = 0;
+    USB_PD_SRC_PDOTypeDef retval = {
+        .d32 = 0,
+    };
 
     retval.fix.Voltage = milli_volts / 50;
     retval.fix.Max_Operating_Current = milli_amps / 10;
@@ -133,6 +135,11 @@ static struct src_pdo_sort sort_pdo()
             milli_volts = min(sSourcePDOs[i].var.Min_Voltage, sSourcePDOs[i].var.Max_Voltage) * 50;
             milli_amps = sSourcePDOs[i].var.Operating_Current * 10;
             break;
+
+        default:
+            milli_volts = 0;
+            milli_amps = 0;
+            break;
         }
         my_list[i].idx = i;
         my_list[i].milli_volts = milli_volts;
@@ -146,6 +153,7 @@ static struct src_pdo_sort sort_pdo()
 static void read_status_registers()
 {
     uint8_t scratch[40];
+    esp_err_t ret;
 
     ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_ALERT_STATUS_1, scratch, 2), exit, TAG,
                       "reading status reg");
@@ -178,7 +186,7 @@ static void read_status_registers()
 
                     for (int i = 0; i < header.b.NumberOfDataObjects; i++) {
                         sSourcePDOs[i].d32 = LE32(&scratch[i * 4]);
-                        ESP_LOGD(TAG, "RX_DATA_OBJ[%d]: 0x%x", i, sSourcePDOs[i].d32);
+                        ESP_LOGD(TAG, "RX_DATA_OBJ[%d]: 0x%lx", i, sSourcePDOs[i].d32);
                     }
                     sNumSourcePDOsAvailable = header.b.NumberOfDataObjects;
 
@@ -198,7 +206,7 @@ static async run(struct async* pt)
     struct src_pdo_sort pdo;
     USB_PD_SRC_PDOTypeDef pdo_usbpd;
 
-    async_begin(pt);
+    async_begin(pt)
 
     await(sNumSourcePDOsAvailable > 0);
 
@@ -208,7 +216,7 @@ static async run(struct async* pt)
     stusb4500_setPDOCount(2);
     stusb4500_softReset();
 
-    async_end;
+    async_end
 }
 
 static void stusb4500_task(void * params)
