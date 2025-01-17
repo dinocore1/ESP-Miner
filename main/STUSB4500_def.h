@@ -2,6 +2,9 @@
 #define STUSB4500_DEF_H_
 
 #define REG_ALERT_STATUS_1 0x0B
+#define REG_ALERT_STATUS_MASK 0x0C
+#define REG_PORT_STATUS_0 0x0D
+#define REG_PORT_STATUS_1 0x0E
 #define REG_PRT_STATUS 0x16
 #define REG_PD_COMMAND_CTRL 0x1A
 #define REG_DPM_PDO_NUM 0x70
@@ -25,6 +28,20 @@ typedef union
         uint8_t HARD_RESET_AL : 1;
     } b;
 } STUSB_GEN1S_ALERT_STATUS_RegTypeDef;
+
+typedef union
+{
+    uint8_t d8;
+    struct
+    {
+        uint8_t CC_ATTACH_STATE : 1;
+        uint8_t CC_VCONN_SUPPLY_STATE : 1;
+        uint8_t CC_DATA_ROLE : 1;
+        uint8_t CC_POWER_ROLE : 1;
+        uint8_t START_UP_POWER_MODE : 1;
+        uint8_t CC_ATTACH_MODE : 3;
+    } b;
+} STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef;
 
 typedef union
 {

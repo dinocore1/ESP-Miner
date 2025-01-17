@@ -41,12 +41,15 @@ static USB_PD_SRC_PDOTypeDef sSourcePDOs[7];
 
 static void stusb4500_task(void * params);
 
+static volatile uint16_t alert_count = 0;
+
 static void alert_isr_handler(void * arg)
 {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    alert_count++;
+    // BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    xTaskNotifyFromISR(taskHandle, TASK_NOTIFY_ISR_ALART, eSetBits, &xHigherPriorityTaskWoken);
-    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    // xTaskNotifyFromISR(taskHandle, TASK_NOTIFY_ISR_ALART, eSetBits, &xHigherPriorityTaskWoken);
+    // portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 static void stusb4500_setPDOCount(uint8_t const count)
@@ -202,14 +205,14 @@ static void read_status_registers()
 exit:
 }
 
-static async run(struct async* pt)
+static async run(struct async * pt)
 {
     struct src_pdo_sort pdo;
     USB_PD_SRC_PDOTypeDef pdo_usbpd;
 
     async_begin(pt)
 
-    await(sNumSourcePDOsAvailable > 0);
+        await(sNumSourcePDOsAvailable > 0);
 
     pdo = sort_pdo();
     pdo_usbpd = stusb4500_createFixedPDO(pdo.milli_volts, pdo.milli_amps);
@@ -238,13 +241,12 @@ static void stusb4500_task(void * params)
         if (ulNotifiedValue & TASK_NOTIFY_ISR_ALART) {
             read_status_registers();
         }
-
     }
 }
 
 esp_err_t STUSB4500_init()
 {
-    uint8_t device_id;
+    uint8_t scratch[10];
 
     sNumSourcePDOsAvailable = 0;
 
@@ -254,9 +256,26 @@ esp_err_t STUSB4500_init()
         return ESP_FAIL;
     }
 
-    ESP_RETURN_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_DEVICE_ID, &device_id, 1), TAG, "reading device id");
-    ESP_LOGI(TAG, "device id: 0x%x", device_id);
-    ESP_RETURN_ON_FALSE(device_id == 0x25, ESP_FAIL, TAG, "device id mismatch expecting 0x25");
+    ESP_RETURN_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_DEVICE_ID, scratch, 1), TAG, "reading device id");
+    ESP_LOGI(TAG, "device id: 0x%x", scratch[0]);
+    ESP_RETURN_ON_FALSE(scratch[0] == 0x25, ESP_FAIL, TAG, "device id mismatch expecting 0x25");
+
+    // clear all ALERT Status by reading
+    uint8_t address = REG_ALERT_STATUS_1;
+    for (int i = 0; i <= 12; i++) {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, address, scratch, 1);
+        address++;
+    }
+
+    // set interrups to unmask
+    STUSB_GEN1S_ALERT_STATUS_RegTypeDef mask;
+    mask.d8 = 0xFF;
+    mask.b.PHY_STATUS_AL = 0;
+    mask.b.CC_DETECTION_STATUS_AL = 0;
+    mask.b.PD_TYPEC_STATUS_AL = 0;
+    mask.b.HARD_RESET_AL = 0;
+    ESP_RETURN_ON_ERROR(i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_ALERT_STATUS_MASK, mask.d8), TAG,
+                        "write ALERT_STATUS_MASK");
 
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << ALERT_PIN),
@@ -266,12 +285,18 @@ esp_err_t STUSB4500_init()
     };
     gpio_config(&io_conf);
 
+    // xTaskCreate(stusb4500_task, TAG, 4096, NULL, 10, &taskHandle);
+
     ESP_RETURN_ON_ERROR(gpio_isr_handler_add(ALERT_PIN, alert_isr_handler, NULL), TAG, "adding ISR handler");
 
-    xTaskCreate(stusb4500_task, TAG, 4096, NULL, 10, &taskHandle);
+    i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PORT_STATUS_1, scratch, 10);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, scratch, 10, ESP_LOG_DEBUG);
 
-    stusb4500_createFixedPDO(5000, 500);
-    stusb4500_setPDOCount(1);
+    STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef port_status;
+    port_status.d8 = scratch[0];
+
+    // stusb4500_createFixedPDO(5000, 500);
+    // stusb4500_setPDOCount(1);
 
     return ESP_OK;
 }
