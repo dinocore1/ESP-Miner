@@ -3,6 +3,7 @@
 #include <driver/gpio.h>
 #include <esp_check.h>
 #include <esp_log.h>
+#include <esp_task_wdt.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -43,6 +44,8 @@ static void stusb4500_task(void * params);
 
 static volatile uint16_t alert_count = 0;
 
+static STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef port_status;
+
 static void alert_isr_handler(void * arg)
 {
     alert_count++;
@@ -52,6 +55,36 @@ static void alert_isr_handler(void * arg)
     // portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
+static int cable_connected()
+{
+    return 0;
+}
+
+/**
+ * prints the current negociated power contract
+ */
+static void print_power_contract()
+{
+    STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef Nego_RDO;
+    i2c_bitaxe_register_read(stusb4500_dev_handle, REG_RDO_STATUS, (uint8_t *) &Nego_RDO.d32, 4);
+
+    if (Nego_RDO.d32 != 0) {
+        ESP_LOGI(TAG, "Requested position: PDO %d", Nego_RDO.b.Object_Pos);
+
+        int OpCurrent_mA = Nego_RDO.b.OperatingCurrent * 10;
+        int MaxCurrent_mA = Nego_RDO.b.MaxCurrent * 10;
+        ESP_LOGI(TAG, "Operating Current: %d mA , Max Current: %d mA", OpCurrent_mA, MaxCurrent_mA);
+        ESP_LOGI(TAG, "USB Com capable: %d, Capability Mismatch: %d", Nego_RDO.b.UsbComCap, Nego_RDO.b.CapaMismatch);
+    } else {
+        ESP_LOGI(TAG, "No explicit Contract yet");
+    }
+
+    uint8_t value;
+    i2c_bitaxe_register_read(stusb4500_dev_handle, 0x21, &value, 1);
+    uint16_t milli_volts = value * 100;
+    ESP_LOGI(TAG, "Voltage requested: %d mV", milli_volts);
+}
+
 static void stusb4500_setPDOCount(uint8_t const count)
 {
     i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_DPM_PDO_NUM, count);
@@ -59,8 +92,11 @@ static void stusb4500_setPDOCount(uint8_t const count)
 
 static void stusb4500_softReset()
 {
+    ESP_LOGD(TAG, "performing soft reset");
+
     // SOFT_RESET
     i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_TX_HEADER_LOW, 0x0D);
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_TX_HEADER_HIGH, 0x00);
 
     // SEND_COMMAND
     i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_PD_COMMAND_CTRL, 0x26);
@@ -161,9 +197,11 @@ static void read_status_registers()
 
     ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_ALERT_STATUS_1, scratch, 2), exit, TAG,
                       "reading status reg");
-    status.d8 = scratch[0] & ~scratch[1];
+    
+    ESP_LOGD(TAG, "ALERT_STATUS: 0x%x", scratch[0]);
+    ESP_LOGD(TAG, "ALERT_STATUS_MASK: 0x%x", scratch[1]);
 
-    ESP_LOGD(TAG, "ALERT_STATUS: 0x%x", status.d8);
+    status.d8 = scratch[0] & ~scratch[1];
 
     if (status.b.PRT_STATUS_AL) {
 
@@ -205,6 +243,20 @@ static void read_status_registers()
 exit:
 }
 
+static async service_irq(struct async * pt)
+{
+    async_begin(pt)
+
+    while (true) {
+        await(alert_count > 0);
+
+        read_status_registers();
+        alert_count--;
+    }
+
+    async_end
+}
+
 static async run(struct async * pt)
 {
     struct src_pdo_sort pdo;
@@ -212,13 +264,17 @@ static async run(struct async * pt)
 
     async_begin(pt)
 
-        await(sNumSourcePDOsAvailable > 0);
+    stusb4500_softReset();
+
+    await(sNumSourcePDOsAvailable > 0);
 
     pdo = sort_pdo();
     pdo_usbpd = stusb4500_createFixedPDO(pdo.milli_volts, pdo.milli_amps);
     stusb4500_writePDO(1, pdo_usbpd);
     stusb4500_setPDOCount(2);
     stusb4500_softReset();
+
+    print_power_contract();
 
     async_end
 }
@@ -285,16 +341,28 @@ esp_err_t STUSB4500_init()
     };
     gpio_config(&io_conf);
 
-    // xTaskCreate(stusb4500_task, TAG, 4096, NULL, 10, &taskHandle);
-
     ESP_RETURN_ON_ERROR(gpio_isr_handler_add(ALERT_PIN, alert_isr_handler, NULL), TAG, "adding ISR handler");
 
     i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PORT_STATUS_1, scratch, 10);
     ESP_LOG_BUFFER_HEX_LEVEL(TAG, scratch, 10, ESP_LOG_DEBUG);
 
-    STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef port_status;
     port_status.d8 = scratch[0];
 
+    struct async irq_async;
+    struct async run_async;
+
+    async_init(&irq_async);
+    async_init(&run_async);
+
+    while (true) {
+        service_irq(&irq_async);
+        run(&run_async);
+        vTaskDelay(1);
+    }
+
+    stusb4500_softReset();
+
+    // xTaskCreate(stusb4500_task, TAG, 4096, NULL, 10, &taskHandle);
     // stusb4500_createFixedPDO(5000, 500);
     // stusb4500_setPDOCount(1);
 

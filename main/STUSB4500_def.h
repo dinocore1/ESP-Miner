@@ -1,10 +1,7 @@
 #ifndef STUSB4500_DEF_H_
 #define STUSB4500_DEF_H_
 
-#define REG_ALERT_STATUS_1 0x0B
-#define REG_ALERT_STATUS_MASK 0x0C
 #define REG_PORT_STATUS_0 0x0D
-#define REG_PORT_STATUS_1 0x0E
 #define REG_PRT_STATUS 0x16
 #define REG_PD_COMMAND_CTRL 0x1A
 #define REG_DPM_PDO_NUM 0x70
@@ -12,7 +9,10 @@
 #define REG_RX_HEADER 0x31
 #define REG_RX_DATA_OBJ 0x33
 #define REG_TX_HEADER_LOW 0x51
+#define REG_TX_HEADER_HIGH 0x52
 
+#define REG_ALERT_STATUS_1 0x0B
+#define REG_ALERT_STATUS_MASK 0x0C
 typedef union
 {
     uint8_t d8;
@@ -29,6 +29,7 @@ typedef union
     } b;
 } STUSB_GEN1S_ALERT_STATUS_RegTypeDef;
 
+#define REG_PORT_STATUS_1 0x0E
 typedef union
 {
     uint8_t d8;
@@ -158,5 +159,25 @@ typedef union
                             1;
     } b;
 } USBPD_MsgHeader_TypeDef;
+
+#define REG_RDO_STATUS 0x91
+typedef union
+{
+    uint32_t d32;
+    struct
+    {
+        uint32_t MaxCurrent : 10; // Bits 9..0
+        uint32_t OperatingCurrent : 10;
+        uint8_t reserved_22_20 : 3;
+        uint8_t UnchunkedMess_sup : 1;
+        uint8_t UsbSuspend : 1;
+        uint8_t UsbComCap : 1;
+        uint8_t CapaMismatch : 1;
+        uint8_t GiveBack : 1;
+        uint8_t Object_Pos : 3;  // Bits 30..28 (3-bit)
+        uint8_t reserved_31 : 1; // Bits 31
+
+    } b;
+} STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef;
 
 #endif // STUSB4500_DEF_H_
