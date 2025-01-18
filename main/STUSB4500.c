@@ -230,10 +230,16 @@ static void read_status_registers()
         ESP_LOGD(TAG, "Monitoring Status: 0x%x 0x%x", scratch[0], scratch[1]);
     }
 
+    if (status.b.HW_FAULT_STATUS_AL) {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, REG_CC_HW_FAULT_STATUS_0, scratch, 2);
+        ESP_LOGD(TAG, "CC_HW_FAULT Status: 0x%x 0x%x", scratch[0], scratch[1]);
+    }
+
     if (status.b.PRT_STATUS_AL) {
 
-        ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PRT_STATUS, &PRT_status.d8, 1), exit, TAG,
+        ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PRT_STATUS, scratch, 1), exit, TAG,
                           "reading PRT_status reg");
+        PRT_status.d8 = scratch[0];
 
         ESP_LOGD(TAG, "PRT_STATUS: 0x%x", PRT_status.d8);
 
@@ -248,7 +254,7 @@ static void read_status_registers()
 
             if (header.b.NumberOfDataObjects > 0) {
                 switch (header.b.MessageType) {
-                case 0x01:
+                case USBPD_DATAMSG_Source_Capabilities:
                     ESP_GOTO_ON_ERROR(
                         i2c_bitaxe_register_read(stusb4500_dev_handle, REG_RX_DATA_OBJ, scratch, header.b.NumberOfDataObjects * 4),
                         exit, TAG, "read RX_DATA_OBJ");

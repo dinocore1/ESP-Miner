@@ -3,6 +3,7 @@
 
 #define REG_PORT_STATUS_0 0x0D
 #define REG_MONITORING_STATUS_0 0x0F
+#define REG_CC_HW_FAULT_STATUS_0 0x12
 #define REG_PRT_STATUS 0x16
 #define REG_PD_COMMAND_CTRL 0x1A
 #define REG_DPM_PDO_NUM 0x70
@@ -181,5 +182,46 @@ typedef union
 
     } b;
 } STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef;
+
+// Table 6-5 Control Message Types
+#define USBPD_CTRLMSG_Reserved1 0x00
+#define USBPD_CTRLMSG_GoodCRC 0x01
+#define USBPD_CTRLMSG_GotoMin 0x02
+#define USBPD_CTRLMSG_Accept 0x03
+#define USBPD_CTRLMSG_Reject 0x04
+#define USBPD_CTRLMSG_Ping 0x05
+#define USBPD_CTRLMSG_PS_RDY 0x06
+#define USBPD_CTRLMSG_Get_Source_Cap 0x07
+#define USBPD_CTRLMSG_Get_Sink_Cap 0x08
+#define USBPD_CTRLMSG_DR_Swap 0x09
+#define USBPD_CTRLMSG_PR_Swap 0x0A
+#define USBPD_CTRLMSG_VCONN_Swap 0x0B
+#define USBPD_CTRLMSG_Wait 0x0C
+#define USBPD_CTRLMSG_Soft_Reset 0x0D
+#define USBPD_CTRLMSG_Reserved2 0x0E
+#define USBPD_CTRLMSG_Reserved3 0x0F
+#define USBPD_CTRLMSG_Not_Supported 0x10
+#define USBPD_CTRLMSG_Get_Source_Cap_Extended 0x11
+#define USBPD_CTRLMSG_Get_Status 0x12
+#define USBPD_CTRLMSG_FR_Swap 0x13
+#define USBPD_CTRLMSG_Get_PPS_Status 0x14
+#define USBPD_CTRLMSG_Get_Country_Codes 0x15
+#define USBPD_CTRLMSG_Reserved4 0x16
+#define USBPD_CTRLMSG_Reserved5 0x1F
+
+// Table 6-6 Data Message Types
+#define USBPD_DATAMSG_Reserved1 0x00
+#define USBPD_DATAMSG_Source_Capabilities 0x01
+#define USBPD_DATAMSG_Request 0x02
+#define USBPD_DATAMSG_BIST 0x03
+#define USBPD_DATAMSG_Sink_Capabilities 0x04
+#define USBPD_DATAMSG_Battery_Status 0x05
+#define USBPD_DATAMSG_Alert 0x06
+#define USBPD_DATAMSG_Get_Country_Info 0x07
+#define USBPD_DATAMSG_Reserved2 0x08
+#define USBPD_DATAMSG_Reserved3 0x0E
+#define USBPD_DATAMSG_Vendor_Defined 0x0F
+#define USBPD_DATAMSG_Reserved4 0x10
+#define USBPD_DATAMSG_Reserved5 0x1F
 
 #endif // STUSB4500_DEF_H_
