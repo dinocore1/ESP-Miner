@@ -203,6 +203,11 @@ static void read_status_registers()
 
     status.d8 = scratch[0] & ~scratch[1];
 
+    if (status.b.MONITORING_STATUS_AL) {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, REG_MONITORING_STATUS_0, scratch, 2);
+        ESP_LOGD(TAG, "Monitoring Status: 0x%x 0x%x", scratch[0], scratch[1]);
+    }
+
     if (status.b.PRT_STATUS_AL) {
 
         ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PRT_STATUS, &PRT_status.d8, 1), exit, TAG,
@@ -324,14 +329,15 @@ esp_err_t STUSB4500_init()
     }
 
     // set interrups to unmask
-    STUSB_GEN1S_ALERT_STATUS_RegTypeDef mask;
+    STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef mask;
     mask.d8 = 0xFF;
-    mask.b.PHY_STATUS_AL = 0;
-    mask.b.CC_DETECTION_STATUS_AL = 0;
-    mask.b.PD_TYPEC_STATUS_AL = 0;
-    mask.b.HARD_RESET_AL = 0;
-    ESP_RETURN_ON_ERROR(i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_ALERT_STATUS_MASK, mask.d8), TAG,
-                        "write ALERT_STATUS_MASK");
+    mask.b.PRT_STATUS_AL_MASK = 0;
+    mask.b.CC_DETECTION_STATUS_AL_MASK = 0;
+    mask.b.MONITORING_STATUS_AL_MASK = 0;
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_ALERT_STATUS_MASK, mask.d8);
+    
+    i2c_bitaxe_register_read(stusb4500_dev_handle, REG_ALERT_STATUS_MASK, scratch, 1);
+    ESP_LOGI(TAG, "MASK: 0x%x", scratch[0]);
 
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << ALERT_PIN),
