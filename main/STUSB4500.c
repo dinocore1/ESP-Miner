@@ -60,6 +60,28 @@ static int cable_connected()
     return 0;
 }
 
+static void stusb4500_sw_reset()
+{
+    uint8_t scratch[12];
+    int i;
+
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_STUSB_GEN1S_RESET_CTRL, 1);
+
+
+    for(i=0;i<2;i++) {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, REG_DEVICE_ID, scratch, 1);
+    }
+
+    for(i=0;i<12;i++) {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, REG_ALERT_STATUS_1 + 1, scratch, 1);
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(27));
+
+    
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_STUSB_GEN1S_RESET_CTRL, 0);
+}
+
 /**
  * prints the current negociated power contract
  */
@@ -222,7 +244,7 @@ static void read_status_registers()
                               "reading RX_HEADER");
             header.d16 = LE16(&scratch[0]);
 
-            ESP_LOGD(TAG, "RX_HEADER: 0x%x", header.d16);
+            ESP_LOGD(TAG, "RX_HEADER: 0x%x num: %d", header.d16, header.b.NumberOfDataObjects);
 
             if (header.b.NumberOfDataObjects > 0) {
                 switch (header.b.MessageType) {
@@ -321,11 +343,14 @@ esp_err_t STUSB4500_init()
     ESP_LOGI(TAG, "device id: 0x%x", scratch[0]);
     ESP_RETURN_ON_FALSE(scratch[0] == 0x25, ESP_FAIL, TAG, "device id mismatch expecting 0x25");
 
+    stusb4500_setPDOCount(2);
+    stusb4500_writePDO(0, stusb4500_createFixedPDO(5000, 1500));
+    stusb4500_writePDO(1, stusb4500_createFixedPDO(9000, 1000));
+    stusb4500_softReset();
+
     // clear all ALERT Status by reading
-    uint8_t address = REG_ALERT_STATUS_1;
     for (int i = 0; i <= 12; i++) {
-        i2c_bitaxe_register_read(stusb4500_dev_handle, address, scratch, 1);
-        address++;
+        i2c_bitaxe_register_read(stusb4500_dev_handle, REG_ALERT_STATUS_1 + i, scratch, 1);
     }
 
     // set interrups to unmask
