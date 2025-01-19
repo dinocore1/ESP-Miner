@@ -28,6 +28,8 @@ typedef union
     } b;
 } USBPDMessageHeader_t;
 
+_Static_assert(sizeof(USBPDMessageHeader_t) == 2, "sizeof(USBPDMessageHeader_t) != 2");
+
 typedef struct USBPDStatus
 {
     uint8_t hwReset;
@@ -109,6 +111,8 @@ void stusb4500_updatePDOSnk();
 void stusb4500_updatePDOSrc(void);
 
 void stusb4500_updateRDOSnk();
+
+void stusb4500_setPDOSnk(PDO_t pdo);
 
 /**
  * clear all pending alerts by reading the status registers.

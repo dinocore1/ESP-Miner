@@ -2,18 +2,19 @@
 #include <stdlib.h>
 
 #include <driver/gpio.h>
-#include <hal/gpio_ll.h>
 #include <esp_check.h>
 #include <esp_log.h>
 #include <esp_task_wdt.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <hal/gpio_ll.h>
 
 #include <async.h>
 
-#include "STUSB4500.h"
 #include "STUSB4500_register.h"
+#include "STUSB4500.h"
 #include "STUSB4500_def.h"
+
 
 #include "i2c_bitaxe.h"
 
@@ -26,7 +27,7 @@
 #define EVAL_DEVICE_ID 0x21 // in device ID reg (0x2F)
 #define PROD_DEVICE_ID 0x25 //
 
-#define ESP_INTR_FLAG_DEFAULT  0
+#define ESP_INTR_FLAG_DEFAULT 0
 
 // convert value at addr to little-endian (16-bit)
 #define LE_u16(addr) (((((uint16_t) (*(((uint8_t *) (addr)) + 1)))) + (((uint16_t) (*(((uint8_t *) (addr)) + 0))) << 8)))
@@ -89,6 +90,9 @@ void stusb4500_updatePDOSnk(void)
 
     i2c_bitaxe_register_read(stusb4500_dev_handle, DPM_SNK_PDO1, pdo, BUFF_SZ);
 
+    ESP_LOGD(TAG, "PDO count: %d buf_sz: %d", pdoCount, BUFF_SZ);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, pdo, BUFF_SZ, ESP_LOG_DEBUG);
+
     _status.pdoSnkCount = pdoCount;
     for (uint8_t i = 0, j = 0; i < NVM_SNK_PDO_MAX; ++i, j += 4) {
         if (i < pdoCount) {
@@ -102,9 +106,42 @@ void stusb4500_updatePDOSnk(void)
 #undef BUFF_SZ
 }
 
+void stusb4500_setPDOSnk(PDO_t pdo)
+{
+    uint8_t buf[5];
+
+    if ((pdo.number < 1) || (pdo.number > NVM_SNK_PDO_MAX)) {
+        ESP_LOGE(TAG, "Invalid PDO number %d", pdo.number);
+        return;
+    }
+
+    uint16_t voltage_mV = pdo.voltage_mV;
+    //  if (1U == pdo.number) // PDO 1 must always be USB +5V
+    //    { voltage_mV = 5000U; }
+
+    // use the received PDO definition #1 (USB default) as template for new PDO,
+    // just update the voltage and current to the input PDO.
+    USB_PD_SNK_PDO_TypeDef def = _status.pdoSnk[0];
+    uint8_t address = DPM_SNK_PDO1 + (4U * (pdo.number - 1U));
+    def.fix.Voltage = voltage_mV / 50U;
+    def.fix.Operational_Current = pdo.current_mA / 10U;
+
+    buf[0] = address;
+    buf[1] = def.d32 && 0xff;
+    buf[2] = (def.d32 >> 8) && 0xff;
+    buf[3] = (def.d32 >> 16) && 0xff;
+    buf[4] = (def.d32 >> 24) && 0xff;
+
+    i2c_bitaxe_register_write_bytes(stusb4500_dev_handle, buf, 5U);
+}
+
 void stusb4500_updatePDOSrc()
 {
     stusb4500_waitUntilReady();
+
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    stusb4500_sendPDCableReset();
 
     // DELAY(TLOAD_REG_INIT_MS);
 
@@ -120,7 +157,6 @@ void stusb4500_updatePDOSrc()
     //     processAlerts();
     //     ++request;
     // }
-
 }
 
 void stusb4500_updateRDOSnk()
@@ -219,7 +255,6 @@ static void IRAM_ATTR alert_isr_handler(void * arg)
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
     GPIO.status_w1tc = BIT(ALERT_PIN);
-
 
     xTaskNotifyFromISR(taskHandle, TASK_NOTIFY_ISR_ALART, eSetBits, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
@@ -403,18 +438,18 @@ bool stusb4500_sendPDCableReset()
 
 static void read_status_registers()
 {
-    STUSB_GEN1S_ALERT_STATUS_RegTypeDef      alertStatus;
+    STUSB_GEN1S_ALERT_STATUS_RegTypeDef alertStatus;
     STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef alertMask;
     uint8_t scratch[40];
     esp_err_t ret;
 
     i2c_bitaxe_register_read(stusb4500_dev_handle, ALERT_STATUS_1, scratch, 2);
 
-    ESP_LOGD(TAG, "ALERT_STATUS: 0x%x", scratch[0]);
-    // ESP_LOGD(TAG, "ALERT_STATUS_MASK: 0x%x", scratch[1]);
-
-    alertMask.d8   = scratch[1];
+    alertMask.d8 = scratch[1];
     alertStatus.d8 = scratch[0] & ~(alertMask.d8);
+
+    ESP_LOGD(TAG, "ALERT_STATUS: 0x%x", scratch[0]);
+    ESP_LOGD(TAG, "ALERT_STATUS_MASK: 0x%x", scratch[1]);
 
     if (alertStatus.b.PRT_STATUS_AL) {
 
@@ -435,7 +470,8 @@ static void read_status_registers()
 
             if (header.b.dataObjectCount > 0) {
 
-                ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_BYTE_CNT, scratch, 1), exit, TAG, "read RX_BYTE_CNT");
+                ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_BYTE_CNT, scratch, 1), exit, TAG,
+                                  "read RX_BYTE_CNT");
                 uint8_t byte_count = scratch[0];
                 if (byte_count != header.b.dataObjectCount * 4) {
                     ESP_LOGE(TAG, "byte count mismatch: %d != %d", byte_count, header.b.dataObjectCount * 4);
@@ -444,14 +480,17 @@ static void read_status_registers()
 
                 switch (header.b.messageType) {
                 case USBPD_DATAMSG_Source_Capabilities:
-                    ESP_GOTO_ON_ERROR(
-                        i2c_bitaxe_register_read(stusb4500_dev_handle, RX_DATA_OBJ, scratch, byte_count), exit, TAG, "read RX_DATA_OBJ");
-                    
+                    ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_DATA_OBJ, scratch, byte_count), exit, TAG,
+                                      "read RX_DATA_OBJ");
+
                     _status.pdoSrcCount = header.b.dataObjectCount;
                     for (uint8_t i = 0U, j = 0U; i < header.b.dataObjectCount; ++i, j += 4) {
                         _status.pdoSrc[i].d32 = LE_u32(&scratch[j]);
-                        if (0U == i) { _status.pdoSrc[i].fix.Voltage = 100U; }
-                        PDO_init(&_srcPDO[i], i + 1, _status.pdoSrc[i].fix.Voltage * 50U, _status.pdoSrc[i].fix.Max_Operating_Current * 10U, 0);
+                        if (0U == i) {
+                            _status.pdoSrc[i].fix.Voltage = 100U;
+                        }
+                        PDO_init(&_srcPDO[i], i + 1, _status.pdoSrc[i].fix.Voltage * 50U,
+                                 _status.pdoSrc[i].fix.Max_Operating_Current * 10U, 0);
                     }
 
                     _state.srcPDORequesting = 0U;
@@ -479,8 +518,6 @@ static void read_status_registers()
         ESP_LOGD(TAG, "CC_HW_FAULT Status: 0x%x 0x%x", scratch[0], scratch[1]);
         _status.hwFaultStatus.d8 = scratch[1];
     }
-
-    
 
 exit:
 }
@@ -522,26 +559,21 @@ exit:
 //     async_end
 // }
 
-// static void stusb4500_task(void * params)
-// {
-//     const TickType_t xBlockTime = pdMS_TO_TICKS(500);
-//     uint32_t ulNotifiedValue;
-//     esp_err_t ret;
-//     struct async run_task;
+static void stusb4500_task(void * params)
+{
+    const TickType_t xBlockTime = pdMS_TO_TICKS(500);
+    uint32_t ulNotifiedValue;
+    esp_err_t ret;
 
-//     async_init(&run_task);
+    for (;;) {
 
-//     for (;;) {
+        ulNotifiedValue = ulTaskNotifyTake(pdTRUE, xBlockTime);
 
-//         run(&run_task);
-
-//         ulNotifiedValue = ulTaskNotifyTake(pdTRUE, xBlockTime);
-
-//         if (ulNotifiedValue & TASK_NOTIFY_ISR_ALART) {
-//             read_status_registers();
-//         }
-//     }
-// }
+        if (ulNotifiedValue & TASK_NOTIFY_ISR_ALART) {
+            read_status_registers();
+        }
+    }
+}
 
 esp_err_t STUSB4500_init()
 {
@@ -556,6 +588,8 @@ esp_err_t STUSB4500_init()
         ESP_LOGE(TAG, "STUSB4500 not found");
         return ESP_FAIL;
     }
+
+    xTaskCreate(stusb4500_task, TAG, 4096, NULL, 10, &taskHandle);
 
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << ALERT_PIN),
@@ -584,6 +618,7 @@ esp_err_t STUSB4500_init()
     CableStatus_t cable = stusb4500_cableStatus();
     if (CABLE_CONNECTED(cable)) {
         ESP_LOGI(TAG, "Cable connected");
+        vTaskDelay(pdMS_TO_TICKS(100));
         stusb4500_updatePDOSrc();
     }
 
@@ -613,7 +648,6 @@ esp_err_t STUSB4500_init()
 
     // stusb4500_softReset();
 
-    // xTaskCreate(stusb4500_task, TAG, 4096, NULL, 10, &taskHandle);
     // stusb4500_createFixedPDO(5000, 500);
     // stusb4500_setPDOCount(1);
 

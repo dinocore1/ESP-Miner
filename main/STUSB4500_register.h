@@ -39,6 +39,8 @@ typedef union
   } b;
 } STUSB_GEN1S_ALERT_STATUS_RegTypeDef;
 
+_Static_assert(sizeof(STUSB_GEN1S_ALERT_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_ALERT_STATUS_RegTypeDef) != 1");
+
 #define ALERT_STATUS_MASK 0x0C // interrupt MASK same mask as status should be used
 typedef union
 {
@@ -56,6 +58,8 @@ typedef union
   } b;
 } STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef;
 
+_Static_assert(sizeof(STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef) != 1");
+
 /*************************************************************************************************************
   * @brief:   STUSB_GEN1S CC_DETECTION_STATUS_TRANS register Structure definition
   * @Address:   0Dh
@@ -72,6 +76,8 @@ typedef union
     uint8_t _Reserved_1_7      : 7;
   } b;
 } STUSB_GEN1S_CC_DETECTION_STATUS_TRANS_RegTypeDef;
+
+_Static_assert(sizeof(STUSB_GEN1S_CC_DETECTION_STATUS_TRANS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_CC_DETECTION_STATUS_TRANS_RegTypeDef) != 1");
 
 #define STUSBMASK_ATTACH_STATUS_TRANS 0x01 //"0b: Cleared, 1b: Transition occurred on ATTACH_STATUS bit"
 
@@ -95,6 +101,8 @@ typedef union
     uint8_t CC_ATTACH_MODE        : 3;
   } b;
 } STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef;
+
+_Static_assert(sizeof(STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef) != 1");
 
 #define STUSBMASK_ATTACHED_STATUS 0x01
 #define VALUE_NOT_ATTACHED        0x00
@@ -125,6 +133,8 @@ typedef union
   } b;
 } STUSB_GEN1S_MONITORING_STATUS_TRANS_RegTypeDef;
 
+_Static_assert(sizeof(STUSB_GEN1S_MONITORING_STATUS_TRANS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_MONITORING_STATUS_TRANS_RegTypeDef) != 1");
+
 /*************************************************************************************************************
   * @brief:   STUSB_GEN1S MONITORING_STATUS register Structure definition
   * @Address:   10h
@@ -146,6 +156,8 @@ typedef union
   } b;
 } STUSB_GEN1S_MONITORING_STATUS_RegTypeDef;
 
+_Static_assert(sizeof(STUSB_GEN1S_MONITORING_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_MONITORING_STATUS_RegTypeDef) != 1");
+
 #define CC_STATUS 0x11
 typedef union
 {
@@ -159,6 +171,8 @@ typedef union
     uint8_t _Reserved_4_7          : 2;
   } b;
 } STUSB_GEN1S_CC_STATUS_RegTypeDef;
+
+_Static_assert(sizeof(STUSB_GEN1S_CC_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_CC_STATUS_RegTypeDef) != 1");
 
 /************************************************************************************************************
   * @brief:   STUSB_GEN1S HW_FAULT_STATUS_TRANS register Structure definition
@@ -184,6 +198,8 @@ typedef union
   } b;
 } STUSB_GEN1S_HW_FAULT_STATUS_TRANS_RegTypeDef;
 
+_Static_assert(sizeof(STUSB_GEN1S_HW_FAULT_STATUS_TRANS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_HW_FAULT_STATUS_TRANS_RegTypeDef) != 1");
+
 /************************************************************************************************************
   * @brief:   STUSB_GEN1S HW_FAULT_STATUS register Structure definition
   * @Address:   13h
@@ -208,6 +224,8 @@ typedef union
   } b;
 } STUSB_GEN1S_HW_FAULT_STATUS_RegTypeDef;
 
+_Static_assert(sizeof(STUSB_GEN1S_HW_FAULT_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_HW_FAULT_STATUS_RegTypeDef) != 1");
+
 /************************************************************************************************************
   * @brief:   STUSB_GEN1S PD_TYPEC_STATUS register Structure definition
   * @Address:   14h
@@ -224,6 +242,8 @@ typedef union
     uint8_t Reserved_4_7        : 4;
   } b;
 } STUSB_GEN1S_PD_TYPEC_STATUS_RegTypeDef;
+
+_Static_assert(sizeof(STUSB_GEN1S_PD_TYPEC_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_PD_TYPEC_STATUS_RegTypeDef) != 1");
 
 /************************************************************************************************************
   * @brief:   STUSB_GEN1S TYPE_C_STATUS register Structure definition
@@ -243,6 +263,8 @@ typedef union
     uint8_t REVERSE         : 1;
   } b;
 } STUSB_GEN1S_TYPE_C_STATUS_RegTypeDef;
+
+_Static_assert(sizeof(STUSB_GEN1S_TYPE_C_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_TYPE_C_STATUS_RegTypeDef) != 1");
 
 #define MASK_REVERSE 0x80 //0: CC1 is attached 1: CC2 is Attach.
 
@@ -270,6 +292,8 @@ typedef union
   } b;
 } STUSB_GEN1S_PRT_STATUS_RegTypeDef;
 
+_Static_assert(sizeof(STUSB_GEN1S_PRT_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_PRT_STATUS_RegTypeDef) != 1");
+
 /************************************************************************************************************
   * @brief:   STUSB_GEN1S PHY_STATUS register Structure definition
   * @Address:   17h
@@ -292,6 +316,8 @@ typedef union
 
   } b;
 } STUSB_GEN1S_PHY_STATUS_RegTypeDef;
+
+_Static_assert(sizeof(STUSB_GEN1S_PHY_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_PHY_STATUS_RegTypeDef) != 1");
 
 /************************************************************************************************************
   * @brief:   STUSB_GEN1S CC_CAPABILITY_CTRL register Structure definition
@@ -316,6 +342,8 @@ typedef union
   } b;
 } STUSB_GEN1S_CC_CAPABILITY_CTRL_RegTypeDef;
 
+_Static_assert(sizeof(STUSB_GEN1S_CC_CAPABILITY_CTRL_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_CC_CAPABILITY_CTRL_RegTypeDef) != 1");
+
 /************************************************************************************************************
   * @brief:   STUSB_GEN1S PRT_TX_CTRL register Structure definition
   * @Address:   19h
@@ -335,6 +363,8 @@ typedef union
   } b;
 } STUSB_GEN1S_PRT_TX_CTRL_RegTypeDef;
 
+_Static_assert(sizeof(STUSB_GEN1S_PRT_TX_CTRL_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_PRT_TX_CTRL_RegTypeDef) != 1");
+
 /************************************************************************************************************
   * @brief:   STUSB_GEN1S PD_COMMAND_CTRL register Structure definition
   * @Address:   1Ah
@@ -350,6 +380,8 @@ typedef union
     uint8_t PD_CMD : 8;
   } b;
 } STUSB_GEN1S_PD_CMD_CTRL_RegTypeDef;
+
+_Static_assert(sizeof(STUSB_GEN1S_PD_CMD_CTRL_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_PD_CMD_CTRL_RegTypeDef) != 1");
 
 /************************************************************************************************************
   * @brief:   STUSB_GEN1S_DEVICE_CTRL register Structure definition
@@ -369,6 +401,8 @@ typedef union
     uint8_t PD_TOP_LAYER : 2;
   } b;
 } STUSB_GEN1S_DEVICE_CTRL_RegTypeDef;
+
+_Static_assert(sizeof(STUSB_GEN1S_DEVICE_CTRL_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_DEVICE_CTRL_RegTypeDef) != 1");
 
 #define SNK_UNATTACHED        0x00
 #define SNK_ATTACHWAIT        0x01
@@ -401,6 +435,8 @@ typedef union
   } b;
 } STUSB_GEN1S_MONITORING_CTRL_1_RegTypeDef;
 
+_Static_assert(sizeof(STUSB_GEN1S_MONITORING_CTRL_1_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_MONITORING_CTRL_1_RegTypeDef) != 1");
+
 /************************************************************************************************************
   * @brief:   STUSB RESET_CTRL register Structure definition
   * @Address:   23h
@@ -418,6 +454,8 @@ typedef union
     uint8_t _Reserved_1_7 : 7;
   } b;
 } STUSB_GEN1S_RESET_CTRL_RegTypeDef;
+
+_Static_assert(sizeof(STUSB_GEN1S_RESET_CTRL_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_RESET_CTRL_RegTypeDef) != 1");
 
 typedef enum
 {
@@ -488,23 +526,25 @@ typedef union
     uint8_t  Higher_Capability          :  1;
     uint8_t  Dual_Role_Power            :  1;
     uint8_t  Fixed_Supply               :  2;
-  } fix;
+  } __attribute__((packed)) fix;
   struct
   {
     uint32_t Operating_Current : 10;
     uint32_t Min_Voltage       : 10;
     uint32_t Max_Voltage       : 10;
     uint8_t  VariableSupply    :  2;
-  } var;
+  } __attribute__((packed)) var;
   struct
   {
     uint32_t Operating_Power : 10;
     uint32_t Min_Voltage     : 10;
     uint32_t Max_Voltage     : 10;
     uint8_t  Battery         :  2;
-  } bat;
+  } __attribute__((packed)) bat;
 
 } USB_PD_SNK_PDO_TypeDef;
+
+_Static_assert(sizeof(USB_PD_SNK_PDO_TypeDef) == 4, "sizeof(USB_PD_SNK_PDO_TypeDef) != 4");
 
 #define PDO_SNK_FIX_FIXED    0
 #define PDO_SNK_FIX_VARIABLE 1
@@ -526,7 +566,7 @@ typedef union
     uint8_t  SuspendSuported       :  1; // bits 28
     uint8_t  DualRolePower         :  1; // bits 29
     uint8_t  FixedSupply           :  2; // bits 31..30
-  } fix;
+  } __attribute__((packed)) fix;
   struct
   {
     //Table 6-11 Variable Supply (non-Battery) PDO - Source
@@ -534,7 +574,7 @@ typedef union
     uint32_t Min_Voltage       : 10;
     uint32_t Max_Voltage       : 10;
     uint8_t  VariableSupply    :  2;
-  } var;
+  } __attribute__((packed)) var;
   struct
   {
     //Table 6-12 Battery Supply PDO - Source
@@ -542,9 +582,11 @@ typedef union
     uint32_t Min_Voltage     : 10;
     uint32_t Max_Voltage     : 10;
     uint8_t  Battery         :  2;
-  } bat;
+  } __attribute__((packed)) bat;
 
 } USB_PD_SRC_PDO_TypeDef;
+
+_Static_assert(sizeof(USB_PD_SRC_PDO_TypeDef) == 4, "sizeof(USB_PD_SRC_PDO_TypeDef) != 4");
 
 #define DPM_REQ_RDO    0x91 // (32bits)
 #define RDO_REG_STATUS 0x91
@@ -566,6 +608,8 @@ typedef union
 
   } b;
 } STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef;
+
+_Static_assert(sizeof(STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef) == 4, "sizeof(STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef) != 4");
 
 //Table 6-5 Control Message Types
 #define USBPD_CTRLMSG_Reserved1                 0x00
