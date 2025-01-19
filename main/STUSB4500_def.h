@@ -1,227 +1,59 @@
 #ifndef STUSB4500_DEF_H_
 #define STUSB4500_DEF_H_
 
-#define REG_PORT_STATUS_0 0x0D
-#define REG_MONITORING_STATUS_0 0x0F
-#define REG_CC_HW_FAULT_STATUS_0 0x12
-#define REG_PRT_STATUS 0x16
-#define REG_PD_COMMAND_CTRL 0x1A
-#define REG_DPM_PDO_NUM 0x70
-#define REG_STUSB_GEN1S_RESET_CTRL 0x23
-#define REG_DEVICE_ID 0x2f
-#define REG_RX_HEADER 0x31
-#define REG_RX_DATA_OBJ 0x33
-#define REG_TX_HEADER_LOW 0x51
-#define REG_TX_HEADER_HIGH 0x52
+#define USBPD_REV30_SUPPORT 1
+#define NVM_SNK_PDO_MAX 3
+#define NVM_SRC_PDO_MAX 10
 
-#define REG_ALERT_STATUS_1 0x0B
-#define REG_ALERT_STATUS_MASK 0x0C
-typedef union
+typedef struct USBPDStatus
 {
-    uint8_t d8;
-    struct
-    {
-        uint8_t PHY_STATUS_AL : 1;
-        uint8_t PRT_STATUS_AL : 1;
-        uint8_t _Reserved_2 : 1;
-        uint8_t PD_TYPEC_STATUS_AL : 1;
-        uint8_t HW_FAULT_STATUS_AL : 1;
-        uint8_t MONITORING_STATUS_AL : 1;
-        uint8_t CC_DETECTION_STATUS_AL : 1;
-        uint8_t HARD_RESET_AL : 1;
-    } b;
-} STUSB_GEN1S_ALERT_STATUS_RegTypeDef;
+    uint8_t hwReset;
+    STUSB_GEN1S_HW_FAULT_STATUS_RegTypeDef hwFaultStatus;         // 8-bit
+    STUSB_GEN1S_MONITORING_STATUS_RegTypeDef monitoringStatus;    // 8-bit
+    STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef ccDetectionStatus; // 8-bit
+    STUSB_GEN1S_CC_STATUS_RegTypeDef ccStatus;                    // 8-bit
+    STUSB_GEN1S_PRT_STATUS_RegTypeDef prtStatus;                  // 8-bit
+    STUSB_GEN1S_PHY_STATUS_RegTypeDef phyStatus;                  // 8-bit
+    STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef rdoSnk;
+    size_t pdoSnkCount;
+    USB_PD_SNK_PDO_TypeDef pdoSnk[NVM_SNK_PDO_MAX];
+    size_t pdoSrcCount;
+    USB_PD_SRC_PDO_TypeDef pdoSrc[NVM_SRC_PDO_MAX];
 
-#define REG_PORT_STATUS_1 0x0E
-typedef union
+} USBPDStatus_t;
+
+void USBPDStatus_init(USBPDStatus_t * status);
+
+typedef struct PDO
 {
-    uint8_t d8;
-    struct
-    {
-        uint8_t CC_ATTACH_STATE : 1;
-        uint8_t CC_VCONN_SUPPLY_STATE : 1;
-        uint8_t CC_DATA_ROLE : 1;
-        uint8_t CC_POWER_ROLE : 1;
-        uint8_t START_UP_POWER_MODE : 1;
-        uint8_t CC_ATTACH_MODE : 3;
-    } b;
-} STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef;
+    size_t number;
+    uint16_t voltage_mV;
+    uint16_t current_mA;
+    uint16_t maxCurrent_mA;
+} PDO_t;
 
-typedef union
-{
-    uint8_t d8;
-    struct
-    {
-        uint8_t HWRESET_RECEIVED : 1;
-        uint8_t HWRESET_DONE : 1;
-        uint8_t MSG_RECEIVED : 1;
-        uint8_t MSG_SENT : 1;
-        uint8_t BIST_RECEIVED : 1;
-        uint8_t BIST_SENT : 1;
-        uint8_t Reserved_6 : 1;
-        uint8_t TX_ERROR : 1;
-    } b;
-} STUSB_GEN1S_PRT_STATUS_RegTypeDef;
+void PDO_init(PDO_t * pdo, size_t const number, uint16_t const voltage_mV, uint16_t const current_mA, uint16_t const maxCurrent_mA);
 
-typedef union
-{
-    uint8_t d8;
-    struct
-    {
-        uint8_t PHY_STATUS_AL_MASK : 1;
-        uint8_t PRT_STATUS_AL_MASK : 1;
-        uint8_t _Reserved_2 : 1;
-        uint8_t PD_TYPEC_STATUS_AL_MASK : 1;
-        uint8_t HW_FAULT_STATUS_AL_MASK : 1;
-        uint8_t MONITORING_STATUS_AL_MASK : 1;
-        uint8_t CC_DETECTION_STATUS_AL_MASK : 1;
-        uint8_t HARD_RESET_AL_MASK : 1;
-    } b;
-} STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef;
+void PDO_init_zero(PDO_t * pdo);
 
-typedef union
-{
-    uint32_t d32;
-    struct
-    {
-        uint32_t Max_Operating_Current : 10;
-        uint32_t Voltage : 10;
-        uint8_t PeakCurrent : 2;
-        uint8_t Reserved : 2;
-        uint8_t Unchuncked_Extended : 1;
-        uint8_t Dual_RoleData : 1;
-        uint8_t Communication : 1;
-        uint8_t UnconstraintPower : 1;
-        uint8_t SuspendSupported : 1;
-        uint8_t DualRolePower : 1;
-        uint8_t FixedSupply : 2;
-    } fix;
-    struct
-    {
-        uint32_t Operating_Current : 10;
-        uint32_t Min_Voltage : 10;
-        uint32_t Max_Voltage : 10;
-        uint8_t VariableSupply : 2;
-    } var;
-    struct
-    {
-        uint32_t Operating_Power : 10;
-        uint32_t Min_Voltage : 10;
-        uint32_t Max_Voltage : 10;
-        uint8_t Battery : 2;
-    } bat;
-    struct
-    {
-        /*
-        uint8_t Max_Current :7;
-        uint8_t  Reserved0 :1;
-        uint8_t Min_Voltage:8;
-        uint8_t  Reserved1 :1;
-        uint8_t Max_Voltage:9;
-        uint8_t  Reserved2 :2;
-        uint8_t ProgDev : 2 ;
-        uint8_t Battery:2;
-        */
-        uint8_t Max_Current : 7;
-        uint8_t Reserved0 : 1;
-        uint16_t Min_Voltage : 8; /* to prevent packing issue ?? */
-        uint8_t Reserved1 : 1;
-        uint16_t Max_Voltage : 8;
-        uint8_t Reserved2 : 3;
-        uint8_t ProgDev : 2;
-        uint8_t Battery : 2;
+void stusb4500_setPDOSnkCount(uint8_t const count);
 
-    } apdo;
-} USB_PD_SRC_PDOTypeDef;
+/**
+ * query the internal device ID register of the STUSB4500 and verify it matches
+ * the expected manufacturer-specified ID. this is used to determine if the
+ * device has powered on and can respond to I2C read requests.
+ */
+bool stusb4500_ready(void);
 
-typedef union
-{
-    uint16_t d16;
-    struct
-    {
-#if defined(USBPD_REV30_SUPPORT)
-        uint16_t MessageType : /*!< Message Header's message Type                      */
-                               5;
-#else                           /* USBPD_REV30_SUPPORT */
-        uint16_t MessageType : /*!< Message Header's message Type                      */
-                               4;
-        uint16_t Reserved4 : /*!< Reserved                                           */
-                             1;
-#endif                          /* USBPD_REV30_SUPPORT */
-        uint16_t PortDataRole : /*!< Message Header's Port Data Role                    */
-                                1;
-        uint16_t SpecificationRevision : /*!< Message Header's Spec Revision                     */
-                                         2;
-        uint16_t PortPowerRole_CablePlug : /*!< Message Header's Port Power Role/Cable Plug field  */
-                                           1;
-        uint16_t MessageID : /*!< Message Header's message ID                        */
-                             3;
-        uint16_t NumberOfDataObjects : /*!< Message Header's Number of data object             */
-                                       3;
-        uint16_t Extended : /*!< Reserved                                           */
-                            1;
-    } b;
-} USBPD_MsgHeader_TypeDef;
+void stusb4500_waitUntilReady(void);
 
-#define REG_RDO_STATUS 0x91
-typedef union
-{
-    uint32_t d32;
-    struct
-    {
-        uint32_t MaxCurrent : 10; // Bits 9..0
-        uint32_t OperatingCurrent : 10;
-        uint8_t reserved_22_20 : 3;
-        uint8_t UnchunkedMess_sup : 1;
-        uint8_t UsbSuspend : 1;
-        uint8_t UsbComCap : 1;
-        uint8_t CapaMismatch : 1;
-        uint8_t GiveBack : 1;
-        uint8_t Object_Pos : 3;  // Bits 30..28 (3-bit)
-        uint8_t reserved_31 : 1; // Bits 31
+void stusb4500_updatePDOSnk();
 
-    } b;
-} STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef;
+void stusb4500_updateRDOSnk();
 
-// Table 6-5 Control Message Types
-#define USBPD_CTRLMSG_Reserved1 0x00
-#define USBPD_CTRLMSG_GoodCRC 0x01
-#define USBPD_CTRLMSG_GotoMin 0x02
-#define USBPD_CTRLMSG_Accept 0x03
-#define USBPD_CTRLMSG_Reject 0x04
-#define USBPD_CTRLMSG_Ping 0x05
-#define USBPD_CTRLMSG_PS_RDY 0x06
-#define USBPD_CTRLMSG_Get_Source_Cap 0x07
-#define USBPD_CTRLMSG_Get_Sink_Cap 0x08
-#define USBPD_CTRLMSG_DR_Swap 0x09
-#define USBPD_CTRLMSG_PR_Swap 0x0A
-#define USBPD_CTRLMSG_VCONN_Swap 0x0B
-#define USBPD_CTRLMSG_Wait 0x0C
-#define USBPD_CTRLMSG_Soft_Reset 0x0D
-#define USBPD_CTRLMSG_Reserved2 0x0E
-#define USBPD_CTRLMSG_Reserved3 0x0F
-#define USBPD_CTRLMSG_Not_Supported 0x10
-#define USBPD_CTRLMSG_Get_Source_Cap_Extended 0x11
-#define USBPD_CTRLMSG_Get_Status 0x12
-#define USBPD_CTRLMSG_FR_Swap 0x13
-#define USBPD_CTRLMSG_Get_PPS_Status 0x14
-#define USBPD_CTRLMSG_Get_Country_Codes 0x15
-#define USBPD_CTRLMSG_Reserved4 0x16
-#define USBPD_CTRLMSG_Reserved5 0x1F
-
-// Table 6-6 Data Message Types
-#define USBPD_DATAMSG_Reserved1 0x00
-#define USBPD_DATAMSG_Source_Capabilities 0x01
-#define USBPD_DATAMSG_Request 0x02
-#define USBPD_DATAMSG_BIST 0x03
-#define USBPD_DATAMSG_Sink_Capabilities 0x04
-#define USBPD_DATAMSG_Battery_Status 0x05
-#define USBPD_DATAMSG_Alert 0x06
-#define USBPD_DATAMSG_Get_Country_Info 0x07
-#define USBPD_DATAMSG_Reserved2 0x08
-#define USBPD_DATAMSG_Reserved3 0x0E
-#define USBPD_DATAMSG_Vendor_Defined 0x0F
-#define USBPD_DATAMSG_Reserved4 0x10
-#define USBPD_DATAMSG_Reserved5 0x1F
+/**
+ * clear all pending alerts by reading the status registers.
+ */
+void stusb4500_clearAlerts(bool const unmask);
 
 #endif // STUSB4500_DEF_H_

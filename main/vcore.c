@@ -6,6 +6,9 @@
 #include "adc.h"
 #include "DS4432U.h"
 #include "TPS546.h"
+#ifdef CONFIG_STUSB4500
+#include "STUSB4500.h"
+#endif // CONFIG_STUSB4500
 
 #define TPS40305_VFB 0.6
 
@@ -22,6 +25,11 @@
 static const char *TAG = "vcore.c";
 
 esp_err_t VCORE_init(GlobalState * global_state) {
+
+#ifdef CONFIG_STUSB4500
+    STUSB4500_wait_for_power_ready();
+#endif // CONFIG_STUSB4500
+
     switch (global_state->device_model) {
         case DEVICE_MAX:
         case DEVICE_ULTRA:
