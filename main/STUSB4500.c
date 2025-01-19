@@ -33,8 +33,12 @@
     (((((uint32_t) (*(((uint8_t *) (addr)) + 3)))) + (((uint32_t) (*(((uint8_t *) (addr)) + 2))) << 8) +                           \
       (((uint32_t) (*(((uint8_t *) (addr)) + 1))) << 16) + (((uint32_t) (*(((uint8_t *) (addr)) + 0))) << 24)))
 
+#define CABLE_CONNECTED(c) ((CC1Connected == (c)) || (CC2Connected == (c)))
+
 static i2c_master_dev_handle_t stusb4500_dev_handle;
+static uint16_t _srcCapRequestMax;
 static USBPDStatus_t _status;
+static USBPDStateMachine_t _state;
 static PDO_t _snkRDO;
 static PDO_t _snkPDO[NVM_SNK_PDO_MAX];
 static PDO_t _srcPDO[NVM_SRC_PDO_MAX];
@@ -93,6 +97,27 @@ void stusb4500_updatePDOSnk(void)
 #undef BUFF_SZ
 }
 
+void stusb4500_updatePDOSrc()
+{
+    stusb4500_waitUntilReady();
+
+    // DELAY(TLOAD_REG_INIT_MS);
+
+    uint8_t maxRequests = _srcCapRequestMax;
+    uint8_t request = 0U;
+
+    ++(_state.srcPDORequesting);
+
+    while ((0U != _state.srcPDORequesting) && (request < maxRequests)) {
+        if (!stusb4500_sendPDCableReset()) {
+            break;
+        }
+        processAlerts();
+        ++request;
+    }
+
+}
+
 void stusb4500_updateRDOSnk()
 {
     STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef rdo;
@@ -117,28 +142,71 @@ void stusb4500_updateRDOSnk()
  ****/
 void stusb4500_clearAlerts(bool const unmask)
 {
-  // clear alert status
-  uint8_t alertStatus[12];
-  i2c_bitaxe_register_read(stusb4500_dev_handle, ALERT_STATUS_1, alertStatus, 12);
+    // clear alert status
+    uint8_t alertStatus[12];
+    i2c_bitaxe_register_read(stusb4500_dev_handle, ALERT_STATUS_1, alertStatus, 12);
 
-  STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef alertMask;
-  if (unmask) {
+    STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef alertMask;
+    if (unmask) {
 
-    // set interrupts to unmask
-    alertMask.d8 = 0xFF;
+        // set interrupts to unmask
+        alertMask.d8 = 0xFF;
 
-    //alertMask.b.PHY_STATUS_AL_MASK          = 0U;
-    alertMask.b.PRT_STATUS_AL_MASK          = 0U;
-    alertMask.b.PD_TYPEC_STATUS_AL_MASK     = 0U;
-    //alertMask.b.HW_FAULT_STATUS_AL_MASK     = 0U;
-    alertMask.b.MONITORING_STATUS_AL_MASK   = 0U;
-    alertMask.b.CC_DETECTION_STATUS_AL_MASK = 0U;
-    alertMask.b.HARD_RESET_AL_MASK          = 0U;
+        // alertMask.b.PHY_STATUS_AL_MASK          = 0U;
+        alertMask.b.PRT_STATUS_AL_MASK = 0U;
+        alertMask.b.PD_TYPEC_STATUS_AL_MASK = 0U;
+        // alertMask.b.HW_FAULT_STATUS_AL_MASK     = 0U;
+        alertMask.b.MONITORING_STATUS_AL_MASK = 0U;
+        alertMask.b.CC_DETECTION_STATUS_AL_MASK = 0U;
+        alertMask.b.HARD_RESET_AL_MASK = 0U;
 
-    // unmask the above alarms
-    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, ALERT_STATUS_MASK, alertMask.d8);    
-  }
+        // unmask the above alarms
+        i2c_bitaxe_register_write_byte(stusb4500_dev_handle, ALERT_STATUS_MASK, alertMask.d8);
+    }
+}
 
+void stusb4500_updatePrtStatus(void)
+{
+    uint8_t prtStatus[10];
+    i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PORT_STATUS, prtStatus, 10U);
+
+    _status.ccDetectionStatus.d8 = prtStatus[1];
+    _status.ccStatus.d8 = prtStatus[3];
+    _status.monitoringStatus.d8 = prtStatus[3];
+    _status.hwFaultStatus.d8 = prtStatus[6];
+}
+
+void stusb4500_clearPDOSrc(void)
+{
+    _status.pdoSrcCount = 0U;
+    for (uint8_t i = 0; i < NVM_SRC_PDO_MAX; ++i) {
+        _status.pdoSrc[i].d32 = 0U;
+        PDO_init_zero(&_srcPDO[i]);
+    }
+}
+
+CableStatus_t stusb4500_cableStatus(void)
+{
+    uint8_t portStatus;
+    uint8_t typeCStatus;
+
+    if (i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PORT_STATUS, &portStatus, 1U) != ESP_OK) {
+        return NONE;
+    }
+
+    if (VALUE_ATTACHED == (portStatus & STUSBMASK_ATTACHED_STATUS)) {
+        if (i2c_bitaxe_register_read(stusb4500_dev_handle, REG_TYPE_C_STATUS, &typeCStatus, 1U) != ESP_OK) {
+            return NONE;
+        }
+
+        if (0U == (typeCStatus & MASK_REVERSE)) {
+            return CC1Connected;
+        } else {
+            return CC2Connected;
+        }
+    } else {
+        return NotConnected;
+    }
 }
 
 static void alert_isr_handler(void * arg)
@@ -156,7 +224,6 @@ void STUSB4500_wait_for_power_ready()
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
-
 
 // static void stusb4500_sw_reset()
 // {
@@ -215,6 +282,35 @@ void STUSB4500_wait_for_power_ready()
 //     // SEND_COMMAND
 //     i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_PD_COMMAND_CTRL, 0x26);
 // }
+
+bool stusb4500_sendPDCableReset()
+{
+    uint8_t scratch[2];
+
+    CableStatus_t cable = stusb4500_cableStatus();
+    if (!CABLE_CONNECTED(cable)) {
+        return false;
+    }
+
+    // send PD message "soft reset" to source by setting TX header (0x51) to 0x0D,
+    // and set PD command (0x1A) to 0x26.
+
+    scratch[0] = 0x0D;
+    scratch[1] = 0x00;
+
+    if (i2c_bitaxe_register_write_bytes(stusb4500_dev_handle, TX_HEADER, scratch, 2) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to write TX_HEADER");
+        return false;
+    }
+
+    scratch[0] = 0x26;
+    if (i2c_bitaxe_register_write_bytes(stusb4500_dev_handle, STUSB_GEN1S_CMD_CTRL, scratch, 1) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to write PD_COMMAND_CTRL");
+        return false;
+    }
+
+    return true;
+}
 
 // static void stusb4500_writePDO(uint8_t pdo_num, USB_PD_SRC_PDOTypeDef pdo)
 // {
@@ -348,8 +444,8 @@ void STUSB4500_wait_for_power_ready()
 //                 switch (header.b.MessageType) {
 //                 case USBPD_DATAMSG_Source_Capabilities:
 //                     ESP_GOTO_ON_ERROR(
-//                         i2c_bitaxe_register_read(stusb4500_dev_handle, REG_RX_DATA_OBJ, scratch, header.b.NumberOfDataObjects * 4),
-//                         exit, TAG, "read RX_DATA_OBJ");
+//                         i2c_bitaxe_register_read(stusb4500_dev_handle, REG_RX_DATA_OBJ, scratch, header.b.NumberOfDataObjects *
+//                         4), exit, TAG, "read RX_DATA_OBJ");
 
 //                     for (int i = 0; i < header.b.NumberOfDataObjects; i++) {
 //                         sSourcePDOs[i].d32 = LE32(&scratch[i * 4]);
@@ -450,23 +546,29 @@ esp_err_t STUSB4500_init()
 
     ESP_RETURN_ON_ERROR(gpio_isr_handler_add(ALERT_PIN, alert_isr_handler, NULL), TAG, "adding ISR handler");
 
+    _srcCapRequestMax = DEFAULT_SRC_CAP_REQ_MAX;
+
     USBPDStatus_init(&_status);
+    USBPDStateMachine_init(&_state);
 
     stusb4500_setPDOSnkCount(1);
     stusb4500_updatePDOSnk();
     stusb4500_updateRDOSnk();
     stusb4500_clearAlerts(true);
+    stusb4500_updatePrtStatus();
+    stusb4500_clearPDOSrc();
+
+    CableStatus_t cable = stusb4500_cableStatus();
+    if (CABLE_CONNECTED(cable)) {
+        stusb4500_updatePDOSrc();
+    }
 
     // sPower_ready_sem = xSemaphoreCreateBinary();
-
-
 
     // stusb4500_setPDOCount(2);
     // stusb4500_writePDO(0, stusb4500_createFixedPDO(5000, 1500));
     // stusb4500_writePDO(1, stusb4500_createFixedPDO(15000, 1000));
     // stusb4500_softReset();
-
-    
 
     // print_power_contract();
 
@@ -513,6 +615,34 @@ void USBPDStatus_init(USBPDStatus_t * status)
     status->pdoSrcCount = 0U;
     for (size_t i = 0U; i < NVM_SRC_PDO_MAX; ++i) {
         status->pdoSrc[i].d32 = 0U;
+    }
+}
+
+void USBPDStateMachine_init(USBPDStateMachine_t *)
+{
+    alertReceived = 0U;
+    attachReceived = 0U;
+    irqReceived = 0U;
+    irqHardReset = 0U;
+    attachTransition = 0U;
+    srcPDOReceived = 0U;
+    srcPDORequesting = 0U;
+    psrdyReceived = 0U;
+    msgReceived = 0U;
+    msgAccept = 0U;
+    msgReject = 0U;
+    msgGoodCRC = 0U;
+
+    msgHead = 0U;
+    msgTail = 0U;
+    for (size_t i = 0U; i < USBPD_MESSAGE_QUEUE_SZ; ++i) {
+        msg[i] = 0U;
+    }
+
+    irqHead = 0U;
+    irqTail = 0U;
+    for (size_t i = 0U; i < USBPD_INTERRUPT_QUEUE_SZ; ++i) {
+        irq[i] = 0U;
     }
 }
 

@@ -2,8 +2,11 @@
 #define STUSB4500_DEF_H_
 
 #define USBPD_REV30_SUPPORT 1
+#define USBPD_MESSAGE_QUEUE_SZ    32
+#define USBPD_INTERRUPT_QUEUE_SZ  32
 #define NVM_SNK_PDO_MAX 3
 #define NVM_SRC_PDO_MAX 10
+#define DEFAULT_SRC_CAP_REQ_MAX 200
 
 typedef struct USBPDStatus
 {
@@ -24,6 +27,31 @@ typedef struct USBPDStatus
 
 void USBPDStatus_init(USBPDStatus_t * status);
 
+typedef struct USBPDStateMachine
+{
+    volatile uint8_t alertReceived;
+    volatile uint8_t attachReceived;
+    uint16_t irqReceived;
+    uint16_t irqHardReset;
+    uint16_t attachTransition;
+    uint16_t srcPDOReceived;
+    uint16_t srcPDORequesting;
+    uint16_t psrdyReceived;
+    uint16_t msgReceived;
+    uint16_t msgAccept;
+    uint16_t msgReject;
+    uint16_t msgGoodCRC;
+    uint8_t msgHead;
+    uint8_t msgTail;
+    uint8_t msg[USBPD_MESSAGE_QUEUE_SZ];
+    uint8_t irqHead;
+    uint8_t irqTail;
+    uint8_t irq[USBPD_INTERRUPT_QUEUE_SZ];
+
+} USBPDStateMachine_t;
+
+void USBPDStateMachine_init(USBPDStateMachine_t *);
+
 typedef struct PDO
 {
     size_t number;
@@ -35,6 +63,15 @@ typedef struct PDO
 void PDO_init(PDO_t * pdo, size_t const number, uint16_t const voltage_mV, uint16_t const current_mA, uint16_t const maxCurrent_mA);
 
 void PDO_init_zero(PDO_t * pdo);
+
+typedef enum CableStatus
+{
+    NONE = -1,
+    NotConnected, // = 0
+    CC1Connected, // = 1
+    CC2Connected, // = 2
+    COUNT         // = 3
+} CableStatus_t;
 
 void stusb4500_setPDOSnkCount(uint8_t const count);
 
@@ -49,11 +86,26 @@ void stusb4500_waitUntilReady(void);
 
 void stusb4500_updatePDOSnk();
 
+void stusb4500_updatePDOSrc(void);
+
 void stusb4500_updateRDOSnk();
 
 /**
  * clear all pending alerts by reading the status registers.
  */
 void stusb4500_clearAlerts(bool const unmask);
+
+void stusb4500_updatePrtStatus(void);
+
+void stusb4500_clearPDOSrc(void);
+
+/**
+ * read the port and Type-C status registers to determine if a USB cable is
+ * connected to the STUSB4500 device. if connected, the orientation is
+ * determined and indicated by return value of the selected CC line.
+ */
+CableStatus_t stusb4500_cableStatus(void);
+
+bool stusb4500_sendPDCableReset();
 
 #endif // STUSB4500_DEF_H_
