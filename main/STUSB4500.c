@@ -285,8 +285,6 @@ void STUSB4500_wait_for_power_ready()
 
 bool stusb4500_sendPDCableReset()
 {
-    uint8_t scratch[2];
-
     CableStatus_t cable = stusb4500_cableStatus();
     if (!CABLE_CONNECTED(cable)) {
         return false;
@@ -295,16 +293,12 @@ bool stusb4500_sendPDCableReset()
     // send PD message "soft reset" to source by setting TX header (0x51) to 0x0D,
     // and set PD command (0x1A) to 0x26.
 
-    scratch[0] = 0x0D;
-    scratch[1] = 0x00;
-
-    if (i2c_bitaxe_register_write_bytes(stusb4500_dev_handle, TX_HEADER, scratch, 2) != ESP_OK) {
+    if (i2c_bitaxe_register_write_byte(stusb4500_dev_handle, TX_HEADER, 0x0D) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to write TX_HEADER");
         return false;
     }
 
-    scratch[0] = 0x26;
-    if (i2c_bitaxe_register_write_bytes(stusb4500_dev_handle, STUSB_GEN1S_CMD_CTRL, scratch, 1) != ESP_OK) {
+    if (i2c_bitaxe_register_write_byte(stusb4500_dev_handle, STUSB_GEN1S_CMD_CTRL, 0x26) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to write PD_COMMAND_CTRL");
         return false;
     }
@@ -618,31 +612,31 @@ void USBPDStatus_init(USBPDStatus_t * status)
     }
 }
 
-void USBPDStateMachine_init(USBPDStateMachine_t *)
+void USBPDStateMachine_init(USBPDStateMachine_t * state)
 {
-    alertReceived = 0U;
-    attachReceived = 0U;
-    irqReceived = 0U;
-    irqHardReset = 0U;
-    attachTransition = 0U;
-    srcPDOReceived = 0U;
-    srcPDORequesting = 0U;
-    psrdyReceived = 0U;
-    msgReceived = 0U;
-    msgAccept = 0U;
-    msgReject = 0U;
-    msgGoodCRC = 0U;
+    state->alertReceived = 0U;
+    state->attachReceived = 0U;
+    state->irqReceived = 0U;
+    state->irqHardReset = 0U;
+    state->attachTransition = 0U;
+    state->srcPDOReceived = 0U;
+    state->srcPDORequesting = 0U;
+    state->psrdyReceived = 0U;
+    state->msgReceived = 0U;
+    state->msgAccept = 0U;
+    state->msgReject = 0U;
+    state->msgGoodCRC = 0U;
 
-    msgHead = 0U;
-    msgTail = 0U;
+    state->msgHead = 0U;
+    state->msgTail = 0U;
     for (size_t i = 0U; i < USBPD_MESSAGE_QUEUE_SZ; ++i) {
-        msg[i] = 0U;
+        state->msg[i] = 0U;
     }
 
-    irqHead = 0U;
-    irqTail = 0U;
+    state->irqHead = 0U;
+    state->irqTail = 0U;
     for (size_t i = 0U; i < USBPD_INTERRUPT_QUEUE_SZ; ++i) {
-        irq[i] = 0U;
+        state->irq[i] = 0U;
     }
 }
 
