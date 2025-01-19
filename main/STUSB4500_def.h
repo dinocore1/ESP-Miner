@@ -1,12 +1,32 @@
 #ifndef STUSB4500_DEF_H_
 #define STUSB4500_DEF_H_
 
-#define USBPD_REV30_SUPPORT 1
-#define USBPD_MESSAGE_QUEUE_SZ    32
-#define USBPD_INTERRUPT_QUEUE_SZ  32
+#define USBPD_REV_3_0_SUPPORT 1
+#define USBPD_MESSAGE_QUEUE_SZ 32
+#define USBPD_INTERRUPT_QUEUE_SZ 32
 #define NVM_SNK_PDO_MAX 3
 #define NVM_SRC_PDO_MAX 10
 #define DEFAULT_SRC_CAP_REQ_MAX 200
+
+typedef union
+{
+    uint16_t d16;
+    struct
+    {
+#if defined(USBPD_REV_3_0_SUPPORT)
+        uint16_t messageType : 5; // USBPD rev >= 3.0 message type
+#else
+        uint16_t messageType : 4; // USBPD rev  < 3.0 message type
+        uint16_t reserved_4 : 1;  // reserved
+#endif
+        uint16_t portDataRole : 1;    // port data role
+        uint16_t specRevision : 2;    // spec revision
+        uint16_t portPowerRole : 1;   // port power role/cable plug
+        uint16_t messageID : 3;       // message ID
+        uint16_t dataObjectCount : 3; // number of data objects
+        uint16_t extended : 1;        // reserved
+    } b;
+} USBPDMessageHeader_t;
 
 typedef struct USBPDStatus
 {

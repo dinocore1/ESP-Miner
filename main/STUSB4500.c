@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include <driver/gpio.h>
+#include <hal/gpio_ll.h>
 #include <esp_check.h>
 #include <esp_log.h>
 #include <esp_task_wdt.h>
@@ -25,6 +26,8 @@
 #define EVAL_DEVICE_ID 0x21 // in device ID reg (0x2F)
 #define PROD_DEVICE_ID 0x25 //
 
+#define ESP_INTR_FLAG_DEFAULT  0
+
 // convert value at addr to little-endian (16-bit)
 #define LE_u16(addr) (((((uint16_t) (*(((uint8_t *) (addr)) + 1)))) + (((uint16_t) (*(((uint8_t *) (addr)) + 0))) << 8)))
 
@@ -34,6 +37,8 @@
       (((uint32_t) (*(((uint8_t *) (addr)) + 1))) << 16) + (((uint32_t) (*(((uint8_t *) (addr)) + 0))) << 24)))
 
 #define CABLE_CONNECTED(c) ((CC1Connected == (c)) || (CC2Connected == (c)))
+
+#define TASK_NOTIFY_ISR_ALART (1 << 12)
 
 static i2c_master_dev_handle_t stusb4500_dev_handle;
 static uint16_t _srcCapRequestMax;
@@ -103,18 +108,18 @@ void stusb4500_updatePDOSrc()
 
     // DELAY(TLOAD_REG_INIT_MS);
 
-    uint8_t maxRequests = _srcCapRequestMax;
-    uint8_t request = 0U;
+    // uint8_t maxRequests = _srcCapRequestMax;
+    // uint8_t request = 0U;
 
-    ++(_state.srcPDORequesting);
+    // ++(_state.srcPDORequesting);
 
-    while ((0U != _state.srcPDORequesting) && (request < maxRequests)) {
-        if (!stusb4500_sendPDCableReset()) {
-            break;
-        }
-        processAlerts();
-        ++request;
-    }
+    // while ((0U != _state.srcPDORequesting) && (request < maxRequests)) {
+    //     if (!stusb4500_sendPDCableReset()) {
+    //         break;
+    //     }
+    //     processAlerts();
+    //     ++request;
+    // }
 
 }
 
@@ -209,13 +214,15 @@ CableStatus_t stusb4500_cableStatus(void)
     }
 }
 
-static void alert_isr_handler(void * arg)
+static void IRAM_ATTR alert_isr_handler(void * arg)
 {
-    alert_count++;
-    // BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    // xTaskNotifyFromISR(taskHandle, TASK_NOTIFY_ISR_ALART, eSetBits, &xHigherPriorityTaskWoken);
-    // portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    GPIO.status_w1tc = BIT(ALERT_PIN);
+
+
+    xTaskNotifyFromISR(taskHandle, TASK_NOTIFY_ISR_ALART, eSetBits, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
 void STUSB4500_wait_for_power_ready()
@@ -394,69 +401,89 @@ bool stusb4500_sendPDCableReset()
 //     return my_list[0];
 // }
 
-// static void read_status_registers()
-// {
-//     uint8_t scratch[40];
-//     esp_err_t ret;
+static void read_status_registers()
+{
+    STUSB_GEN1S_ALERT_STATUS_RegTypeDef      alertStatus;
+    STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef alertMask;
+    uint8_t scratch[40];
+    esp_err_t ret;
 
-//     ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_ALERT_STATUS_1, scratch, 2), exit, TAG,
-//                       "reading status reg");
+    i2c_bitaxe_register_read(stusb4500_dev_handle, ALERT_STATUS_1, scratch, 2);
 
-//     ESP_LOGD(TAG, "ALERT_STATUS: 0x%x", scratch[0]);
-//     ESP_LOGD(TAG, "ALERT_STATUS_MASK: 0x%x", scratch[1]);
+    ESP_LOGD(TAG, "ALERT_STATUS: 0x%x", scratch[0]);
+    // ESP_LOGD(TAG, "ALERT_STATUS_MASK: 0x%x", scratch[1]);
 
-//     status.d8 = scratch[0] & ~scratch[1];
+    alertMask.d8   = scratch[1];
+    alertStatus.d8 = scratch[0] & ~(alertMask.d8);
 
-//     if (status.b.MONITORING_STATUS_AL) {
-//         i2c_bitaxe_register_read(stusb4500_dev_handle, REG_MONITORING_STATUS_0, scratch, 2);
-//         ESP_LOGD(TAG, "Monitoring Status: 0x%x 0x%x", scratch[0], scratch[1]);
-//     }
+    if (alertStatus.b.PRT_STATUS_AL) {
 
-//     if (status.b.HW_FAULT_STATUS_AL) {
-//         i2c_bitaxe_register_read(stusb4500_dev_handle, REG_CC_HW_FAULT_STATUS_0, scratch, 2);
-//         ESP_LOGD(TAG, "CC_HW_FAULT Status: 0x%x 0x%x", scratch[0], scratch[1]);
-//     }
+        ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, PRT_STATUS, scratch, 1), exit, TAG,
+                          "reading PRT_status reg");
+        _status.prtStatus.d8 = scratch[0];
 
-//     if (status.b.PRT_STATUS_AL) {
+        ESP_LOGD(TAG, "PRT_STATUS: 0x%x", _status.prtStatus.d8);
 
-//         ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PRT_STATUS, scratch, 1), exit, TAG,
-//                           "reading PRT_status reg");
-//         PRT_status.d8 = scratch[0];
+        if (_status.prtStatus.b.MSG_RECEIVED == 1U) {
+            USBPDMessageHeader_t header;
 
-//         ESP_LOGD(TAG, "PRT_STATUS: 0x%x", PRT_status.d8);
+            ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_HEADER, scratch, 2), exit, TAG,
+                              "reading RX_HEADER");
+            header.d16 = LE_u16(scratch);
 
-//         if (PRT_status.b.MSG_RECEIVED) {
-//             USBPD_MsgHeader_TypeDef header;
+            ESP_LOGD(TAG, "RX_HEADER: 0x%x num: %d", header.d16, header.b.dataObjectCount);
 
-//             ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_RX_HEADER, scratch, 2), exit, TAG,
-//                               "reading RX_HEADER");
-//             header.d16 = LE16(&scratch[0]);
+            if (header.b.dataObjectCount > 0) {
 
-//             ESP_LOGD(TAG, "RX_HEADER: 0x%x num: %d", header.d16, header.b.NumberOfDataObjects);
+                ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_BYTE_CNT, scratch, 1), exit, TAG, "read RX_BYTE_CNT");
+                uint8_t byte_count = scratch[0];
+                if (byte_count != header.b.dataObjectCount * 4) {
+                    ESP_LOGE(TAG, "byte count mismatch: %d != %d", byte_count, header.b.dataObjectCount * 4);
+                    goto exit;
+                }
 
-//             if (header.b.NumberOfDataObjects > 0) {
-//                 switch (header.b.MessageType) {
-//                 case USBPD_DATAMSG_Source_Capabilities:
-//                     ESP_GOTO_ON_ERROR(
-//                         i2c_bitaxe_register_read(stusb4500_dev_handle, REG_RX_DATA_OBJ, scratch, header.b.NumberOfDataObjects *
-//                         4), exit, TAG, "read RX_DATA_OBJ");
+                switch (header.b.messageType) {
+                case USBPD_DATAMSG_Source_Capabilities:
+                    ESP_GOTO_ON_ERROR(
+                        i2c_bitaxe_register_read(stusb4500_dev_handle, RX_DATA_OBJ, scratch, byte_count), exit, TAG, "read RX_DATA_OBJ");
+                    
+                    _status.pdoSrcCount = header.b.dataObjectCount;
+                    for (uint8_t i = 0U, j = 0U; i < header.b.dataObjectCount; ++i, j += 4) {
+                        _status.pdoSrc[i].d32 = LE_u32(&scratch[j]);
+                        if (0U == i) { _status.pdoSrc[i].fix.Voltage = 100U; }
+                        PDO_init(&_srcPDO[i], i + 1, _status.pdoSrc[i].fix.Voltage * 50U, _status.pdoSrc[i].fix.Max_Operating_Current * 10U, 0);
+                    }
 
-//                     for (int i = 0; i < header.b.NumberOfDataObjects; i++) {
-//                         sSourcePDOs[i].d32 = LE32(&scratch[i * 4]);
-//                         ESP_LOGD(TAG, "RX_DATA_OBJ[%d]: 0x%lx", i, sSourcePDOs[i].d32);
-//                     }
-//                     sNumSourcePDOsAvailable = header.b.NumberOfDataObjects;
+                    _state.srcPDORequesting = 0U;
+                    ++(_state.srcPDOReceived);
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+    }
 
-//                     break;
-//                 default:
-//                     break;
-//                 }
-//             }
-//         }
-//     }
+    // always read & update CC attachement status
+    i2c_bitaxe_register_read(stusb4500_dev_handle, CC_STATUS, scratch, 1);
+    _status.ccStatus.d8 = scratch[0];
 
-// exit:
-// }
+    if (alertStatus.b.MONITORING_STATUS_AL) {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, TYPEC_MONITORING_STATUS_0, scratch, 2);
+        ESP_LOGD(TAG, "Monitoring Status: 0x%x 0x%x", scratch[0], scratch[1]);
+        _status.monitoringStatus.d8 = scratch[1];
+    }
+
+    if (alertStatus.b.HW_FAULT_STATUS_AL) {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, CC_HW_FAULT_STATUS_0, scratch, 2);
+        ESP_LOGD(TAG, "CC_HW_FAULT Status: 0x%x 0x%x", scratch[0], scratch[1]);
+        _status.hwFaultStatus.d8 = scratch[1];
+    }
+
+    
+
+exit:
+}
 
 // static async service_irq(struct async * pt)
 // {
@@ -538,7 +565,9 @@ esp_err_t STUSB4500_init()
     };
     gpio_config(&io_conf);
 
-    ESP_RETURN_ON_ERROR(gpio_isr_handler_add(ALERT_PIN, alert_isr_handler, NULL), TAG, "adding ISR handler");
+    gpio_isr_register(alert_isr_handler, NULL, ESP_INTR_FLAG_DEFAULT, NULL);
+
+    // ESP_RETURN_ON_ERROR(gpio_isr_handler_add(ALERT_PIN, alert_isr_handler, NULL), TAG, "adding ISR handler");
 
     _srcCapRequestMax = DEFAULT_SRC_CAP_REQ_MAX;
 
@@ -554,6 +583,7 @@ esp_err_t STUSB4500_init()
 
     CableStatus_t cable = stusb4500_cableStatus();
     if (CABLE_CONNECTED(cable)) {
+        ESP_LOGI(TAG, "Cable connected");
         stusb4500_updatePDOSrc();
     }
 

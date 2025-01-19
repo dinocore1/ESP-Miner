@@ -53,7 +53,7 @@ esp_err_t input_init(void (*button_short_clicked_cb)(void), void (*button_long_p
     };
     gpio_config(&io_conf);
 
-    ESP_RETURN_ON_ERROR(gpio_isr_handler_add(GPIO_BUTTON_BOOT, button_isr_handler, NULL), TAG, "Error adding ISR handler");
+    // ESP_RETURN_ON_ERROR(gpio_isr_handler_add(GPIO_BUTTON_BOOT, button_isr_handler, NULL), TAG, "Error adding ISR handler");
 
     lv_group_t * group = lv_group_create();
     lv_group_set_default(group);

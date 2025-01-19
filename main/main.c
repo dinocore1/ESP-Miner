@@ -43,7 +43,7 @@ void app_main(void)
     ESP_LOGI(TAG, "Welcome to the bitaxe - hack the planet!");
 
     // Install ISR service and hook the interrupt handler
-    ESP_RETURN_VOID_ON_ERROR(gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT), TAG, "Error installing ISR service");
+    // ESP_RETURN_VOID_ON_ERROR(gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT), TAG, "Error installing ISR service");
 
     // Init I2C
     ESP_ERROR_CHECK(i2c_bitaxe_init());
