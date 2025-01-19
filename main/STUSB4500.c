@@ -94,10 +94,12 @@ void stusb4500_updatePDOSnk(void)
     ESP_LOG_BUFFER_HEX_LEVEL(TAG, pdo, BUFF_SZ, ESP_LOG_DEBUG);
 
     _status.pdoSnkCount = pdoCount;
-    for (uint8_t i = 0, j = 0; i < NVM_SNK_PDO_MAX; ++i, j += 4) {
+    for (uint8_t i = 0, j = 0; i < NVM_SNK_PDO_MAX; i++, j += 4) {
         if (i < pdoCount) {
             _status.pdoSnk[i].d32 = LE_u32(&pdo[j]);
             PDO_init(&_snkPDO[i], i + 1, _status.pdoSnk[i].fix.Voltage * 50U, _status.pdoSnk[i].fix.Operational_Current * 10U, 0);
+
+            ESP_LOGD(TAG, "PDO %d: %d mV %d mA", i, _snkPDO[i].voltage_mV, _snkPDO[i].current_mA);
         } else {
             _status.pdoSnk[i].d32 = 0U;
             PDO_init_zero(&_snkPDO[i]);
@@ -173,8 +175,11 @@ void stusb4500_updateRDOSnk()
         if (_snkRDO.number <= _status.pdoSnkCount) {
             _snkRDO.voltage_mV = _status.pdoSnk[_snkRDO.number - 1U].fix.Voltage * 50U;
         }
+
+        ESP_LOGD(TAG, "RDO: %d %d mV %d mA %d mA", _snkRDO.number, _snkRDO.voltage_mV, _snkRDO.current_mA, _snkRDO.maxCurrent_mA);
     } else {
         PDO_init_zero(&_snkRDO);
+        ESP_LOGD(TAG, "no RDO");
     }
 }
 
@@ -209,12 +214,41 @@ void stusb4500_clearAlerts(bool const unmask)
 void stusb4500_updatePrtStatus(void)
 {
     uint8_t prtStatus[10];
-    i2c_bitaxe_register_read(stusb4500_dev_handle, REG_PORT_STATUS, prtStatus, 10U);
+    i2c_bitaxe_register_read(stusb4500_dev_handle, PORT_STATUS_TRANS, prtStatus, 10U);
 
     _status.ccDetectionStatus.d8 = prtStatus[1];
-    _status.ccStatus.d8 = prtStatus[3];
     _status.monitoringStatus.d8 = prtStatus[3];
+    _status.ccStatus.d8 = prtStatus[4];
     _status.hwFaultStatus.d8 = prtStatus[6];
+
+    ESP_LOGD(TAG, "CC Detection: 0x%02x", _status.ccDetectionStatus.d8);
+
+    if (_status.ccDetectionStatus.b.CC_ATTACH_STATE == 1) {
+        const char* connection_type;
+        switch (_status.ccDetectionStatus.b.CC_ATTACH_MODE) {
+            case 0:
+                connection_type = "None";
+                break;
+            case 1:
+                connection_type = "USB-PD Source";
+                break;
+            case 3:
+                connection_type = "Debug Accessory";
+                break;
+            default:
+                connection_type = "Unknown";
+                break;
+        }
+
+        ESP_LOGI(TAG, "Cable connected: %s", connection_type);
+        ESP_LOGI(TAG, "Power role: %s", _status.ccDetectionStatus.b.CC_POWER_ROLE ? "Sink" : "Source");
+        ESP_LOGI(TAG, "Data role: %s", _status.ccDetectionStatus.b.CC_DATA_ROLE ? "DFP" : "UFP");
+    } else {
+        ESP_LOGI(TAG, "Cable disconnected");
+    }
+
+    ESP_LOGD(TAG, "Monitoring: 0x%02x", _status.monitoringStatus.d8);
+    ESP_LOGI(TAG, "VBUS: %s", _status.monitoringStatus.b.VBUS_READY ? "Ready" : "Unpowered");
 }
 
 void stusb4500_clearPDOSrc(void)
@@ -578,6 +612,8 @@ static void stusb4500_task(void * params)
 esp_err_t STUSB4500_init()
 {
 
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
     ESP_LOGI(TAG, "Initializing STUSB4500");
     if (i2c_bitaxe_add_device(STUSB4500_I2CADDR_DEFAULT, &stusb4500_dev_handle, TAG) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to add device");
@@ -608,7 +644,6 @@ esp_err_t STUSB4500_init()
     USBPDStatus_init(&_status);
     USBPDStateMachine_init(&_state);
 
-    stusb4500_setPDOSnkCount(1);
     stusb4500_updatePDOSnk();
     stusb4500_updateRDOSnk();
     stusb4500_clearAlerts(true);
