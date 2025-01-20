@@ -117,7 +117,7 @@ void stusb4500_setPDOSnk(PDO_t pdo);
 /**
  * clear all pending alerts by reading the status registers.
  */
-void stusb4500_clearAlerts(bool const unmask);
+void stusb4500_clearAlerts(bool unmask);
 
 void stusb4500_updatePrtStatus(void);
 

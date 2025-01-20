@@ -36,7 +36,7 @@ typedef union
     uint8_t MONITORING_STATUS_AL   : 1;
     uint8_t CC_DETECTION_STATUS_AL : 1;
     uint8_t HARD_RESET_AL          : 1;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_ALERT_STATUS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_ALERT_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_ALERT_STATUS_RegTypeDef) != 1");
@@ -55,7 +55,7 @@ typedef union
     uint8_t MONITORING_STATUS_AL_MASK   : 1;
     uint8_t CC_DETECTION_STATUS_AL_MASK : 1;
     uint8_t HARD_RESET_AL_MASK          : 1;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef) != 1");
@@ -74,7 +74,7 @@ typedef union
   {
     uint8_t ATTACH_STATE_TRANS : 1;
     uint8_t _Reserved_1_7      : 7;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_CC_DETECTION_STATUS_TRANS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_CC_DETECTION_STATUS_TRANS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_CC_DETECTION_STATUS_TRANS_RegTypeDef) != 1");
@@ -99,7 +99,7 @@ typedef union
     uint8_t CC_POWER_ROLE         : 1;
     uint8_t START_UP_POWER_MODE   : 1;
     uint8_t CC_ATTACH_MODE        : 3;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_CC_DETECTION_STATUS_RegTypeDef) != 1");
@@ -130,7 +130,7 @@ typedef union
     uint8_t VBUS_LOW_STATUS      : 1;
     uint8_t VBUS_HIGH_STATUS     : 1;
     uint8_t Reserved6_7          : 2;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_MONITORING_STATUS_TRANS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_MONITORING_STATUS_TRANS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_MONITORING_STATUS_TRANS_RegTypeDef) != 1");
@@ -153,7 +153,7 @@ typedef union
     uint8_t VBUS_VSAFE0V   : 1;
     uint8_t VBUS_READY     : 1;
     uint8_t _Reserved_4_7  : 4;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_MONITORING_STATUS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_MONITORING_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_MONITORING_STATUS_RegTypeDef) != 1");
@@ -169,7 +169,7 @@ typedef union
     uint8_t CONNECT_RESULT         : 1;
     uint8_t LOOKING_FOR_CONNECTION : 1;
     uint8_t _Reserved_4_7          : 2;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_CC_STATUS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_CC_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_CC_STATUS_RegTypeDef) != 1");
@@ -195,7 +195,7 @@ typedef union
     uint8_t VPU_OVP_FAULT_TRANS         : 1;
     uint8_t _Reserved_6                 : 1;
     uint8_t THERMAL_FAULT               : 1;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_HW_FAULT_STATUS_TRANS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_HW_FAULT_STATUS_TRANS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_HW_FAULT_STATUS_TRANS_RegTypeDef) != 1");
@@ -221,7 +221,7 @@ typedef union
     uint8_t VBUS_DISCH_FAULT   : 1;
     uint8_t VPU_PRESENCE       : 1;
     uint8_t VPU_OVP_FAULT      : 1;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_HW_FAULT_STATUS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_HW_FAULT_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_HW_FAULT_STATUS_RegTypeDef) != 1");
@@ -240,7 +240,7 @@ typedef union
   {
     uint8_t PD_TYPEC_HAND_CHECK : 4;
     uint8_t Reserved_4_7        : 4;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_PD_TYPEC_STATUS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_PD_TYPEC_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_PD_TYPEC_STATUS_RegTypeDef) != 1");
@@ -261,7 +261,7 @@ typedef union
     uint8_t PD_SNK_TX_RP    : 1;
     uint8_t PD_SRC_TX_RP    : 1;
     uint8_t REVERSE         : 1;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_TYPE_C_STATUS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_TYPE_C_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_TYPE_C_STATUS_RegTypeDef) != 1");
@@ -289,7 +289,7 @@ typedef union
     uint8_t BIST_SENT        : 1;
     uint8_t Reserved_6       : 1;
     uint8_t TX_ERROR         : 1;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_PRT_STATUS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_PRT_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_PRT_STATUS_RegTypeDef) != 1");
@@ -314,7 +314,7 @@ typedef union
     uint8_t Reserved2   : 1;
     uint8_t SOP_RX_Type : 3;
 
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_PHY_STATUS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_PHY_STATUS_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_PHY_STATUS_RegTypeDef) != 1");
@@ -339,7 +339,7 @@ typedef union
     uint8_t CC_VCONN_DISCHARGE_EN : 1;
     uint8_t SNK_DISCONNECT_MODE   : 1;
     uint8_t CC_CURRENT_ADVERTISED : 2;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_CC_CAPABILITY_CTRL_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_CC_CAPABILITY_CTRL_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_CC_CAPABILITY_CTRL_RegTypeDef) != 1");
@@ -360,7 +360,7 @@ typedef union
     uint8_t reserved_3        : 1;
     uint8_t PRT_RETRY_MSG_CNT : 2;
     uint8_t reserved_6_7      : 2;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_PRT_TX_CTRL_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_PRT_TX_CTRL_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_PRT_TX_CTRL_RegTypeDef) != 1");
@@ -399,7 +399,7 @@ typedef union
     uint8_t PHY_TX_RESET : 1;
     uint8_t reserved_2_5 : 4;
     uint8_t PD_TOP_LAYER : 2;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_DEVICE_CTRL_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_DEVICE_CTRL_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_DEVICE_CTRL_RegTypeDef) != 1");
@@ -452,7 +452,7 @@ typedef union
   {
     uint8_t SW_RESET_EN   : 1;
     uint8_t _Reserved_1_7 : 7;
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_RESET_CTRL_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_RESET_CTRL_RegTypeDef) == 1, "sizeof(STUSB_GEN1S_RESET_CTRL_RegTypeDef) != 1");
@@ -606,7 +606,7 @@ typedef union
     uint8_t  Object_Pos        :  3; // Bits 30..28 (3-bit)
     uint8_t  reserved_31       :  1; // Bits 31
 
-  } b;
+  } __attribute__((packed)) b;
 } STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef;
 
 _Static_assert(sizeof(STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef) == 4, "sizeof(STUSB_GEN1S_RDO_REG_STATUS_RegTypeDef) != 4");

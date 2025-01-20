@@ -52,8 +52,11 @@ static volatile uint16_t alert_count = 0;
 
 static volatile uint8_t is_power_ready = 0;
 
-void stusb4500_setPDOSnkCount(uint8_t const count)
+static void read_status_registers();
+
+void stusb4500_setPDOSnkCount(uint8_t count)
 {
+    ESP_LOGD(TAG, "Setting PDO count to %d", count);
     i2c_bitaxe_register_write_byte(stusb4500_dev_handle, DPM_PDO_NUMB, count);
 }
 
@@ -67,7 +70,7 @@ bool stusb4500_ready(void)
 void stusb4500_waitUntilReady(void)
 {
     while (!stusb4500_ready()) {
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
@@ -171,11 +174,23 @@ void stusb4500_setPDOSnk(PDO_t pdo)
 
 void stusb4500_updatePDOSrc()
 {
-    stusb4500_waitUntilReady();
-
-    vTaskDelay(pdMS_TO_TICKS(100));
-
     stusb4500_sendPDCableReset();
+    stusb4500_waitUntilReady();
+    stusb4500_clearAlerts(true);
+
+    // for(int i=0;i<500;i++) {
+    //     read_status_registers();
+    // }
+
+    // for(int i=0;i<3;i++) {
+    //     stusb4500_sendPDCableReset();
+    //     for(int j=0;j<10;j++) {
+    //         // xTaskNotifyGive(taskHandle);
+    //         read_status_registers();
+    //     }
+    // }
+
+    
 
     // DELAY(TLOAD_REG_INIT_MS);
 
@@ -215,31 +230,35 @@ void stusb4500_updateRDOSnk()
     }
 }
 
+static void stusb4500_set_irq_mask()
+{
+    STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef alertMask;
+    // set interrupts to unmask
+    alertMask.d8 = 0xFF;
+
+    // alertMask.b.PHY_STATUS_AL_MASK          = 0U;
+    alertMask.b.PRT_STATUS_AL_MASK = 0U;
+    // alertMask.b.PD_TYPEC_STATUS_AL_MASK = 0U;
+    // alertMask.b.HW_FAULT_STATUS_AL_MASK     = 0U;
+    // alertMask.b.MONITORING_STATUS_AL_MASK = 0U;
+    alertMask.b.CC_DETECTION_STATUS_AL_MASK = 0U;
+    alertMask.b.HARD_RESET_AL_MASK = 0U;
+
+    // unmask the above alarms
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, ALERT_STATUS_MASK, alertMask.d8);
+}
+
 /****
  * clear all pending alerts by reading the status registers.
  ****/
-void stusb4500_clearAlerts(bool const unmask)
+void stusb4500_clearAlerts(bool unmask)
 {
     // clear alert status
     uint8_t alertStatus[12];
     i2c_bitaxe_register_read(stusb4500_dev_handle, ALERT_STATUS_1, alertStatus, 12);
 
-    STUSB_GEN1S_ALERT_STATUS_MASK_RegTypeDef alertMask;
     if (unmask) {
-
-        // set interrupts to unmask
-        alertMask.d8 = 0xFF;
-
-        // alertMask.b.PHY_STATUS_AL_MASK          = 0U;
-        alertMask.b.PRT_STATUS_AL_MASK = 0U;
-        alertMask.b.PD_TYPEC_STATUS_AL_MASK = 0U;
-        // alertMask.b.HW_FAULT_STATUS_AL_MASK     = 0U;
-        alertMask.b.MONITORING_STATUS_AL_MASK = 0U;
-        alertMask.b.CC_DETECTION_STATUS_AL_MASK = 0U;
-        alertMask.b.HARD_RESET_AL_MASK = 0U;
-
-        // unmask the above alarms
-        i2c_bitaxe_register_write_byte(stusb4500_dev_handle, ALERT_STATUS_MASK, alertMask.d8);
+        stusb4500_set_irq_mask();
     }
 }
 
@@ -322,7 +341,8 @@ static void IRAM_ATTR alert_isr_handler(void * arg)
 
     GPIO.status_w1tc = BIT(ALERT_PIN);
 
-    xTaskNotifyFromISR(taskHandle, TASK_NOTIFY_ISR_ALART, eSetBits, &xHigherPriorityTaskWoken);
+    // xTaskNotifyFromISR(taskHandle, TASK_NOTIFY_ISR_ALART, eSetBits, &xHigherPriorityTaskWoken);
+    vTaskNotifyGiveFromISR(taskHandle, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
@@ -333,25 +353,31 @@ void STUSB4500_wait_for_power_ready()
     }
 }
 
-// static void stusb4500_sw_reset()
-// {
-//     uint8_t scratch[12];
-//     int i;
+static void stusb4500_sw_reset()
+{
+    uint8_t scratch[12];
+    int i;
 
-//     i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_STUSB_GEN1S_RESET_CTRL, 1);
+    ESP_LOGD(TAG, "resetting STUSB4500");
 
-//     for (i = 0; i < 2; i++) {
-//         i2c_bitaxe_register_read(stusb4500_dev_handle, REG_DEVICE_ID, scratch, 1);
-//     }
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, STUSB_GEN1S_RESET_CTRL_REG, 1);
 
-//     for (i = 0; i < 12; i++) {
-//         i2c_bitaxe_register_read(stusb4500_dev_handle, REG_ALERT_STATUS_1 + 1, scratch, 1);
-//     }
+    vTaskDelay(pdMS_TO_TICKS(27));
 
-//     vTaskDelay(pdMS_TO_TICKS(27));
+    while(i2c_bitaxe_register_read(stusb4500_dev_handle, REG_DEVICE_ID, scratch, 1) != ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 
-//     i2c_bitaxe_register_write_byte(stusb4500_dev_handle, REG_STUSB_GEN1S_RESET_CTRL, 0);
-// }
+    ESP_LOGD(TAG, "back from reset");
+
+    // for (i = 0; i < 12; i++) {
+    //     i2c_bitaxe_register_read(stusb4500_dev_handle, ALERT_STATUS_1 + 1, scratch, 1);
+    // }
+
+    vTaskDelay(pdMS_TO_TICKS(27));
+
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, STUSB_GEN1S_RESET_CTRL_REG, 0);
+}
 
 /**
  * prints the current negociated power contract
@@ -393,8 +419,10 @@ void STUSB4500_wait_for_power_ready()
 
 bool stusb4500_sendPDCableReset()
 {
+    ESP_LOGD(TAG, "sending PD cable reset");
     CableStatus_t cable = stusb4500_cableStatus();
     if (!CABLE_CONNECTED(cable)) {
+        ESP_LOGE(TAG, "Cable not connected");
         return false;
     }
 
@@ -402,6 +430,11 @@ bool stusb4500_sendPDCableReset()
     // and set PD command (0x1A) to 0x26.
 
     if (i2c_bitaxe_register_write_byte(stusb4500_dev_handle, TX_HEADER, 0x0D) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to write TX_HEADER");
+        return false;
+    }
+
+    if (i2c_bitaxe_register_write_byte(stusb4500_dev_handle, TX_HEADER+1, 0x00) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to write TX_HEADER");
         return false;
     }
@@ -512,12 +545,18 @@ static void read_status_registers()
     i2c_bitaxe_register_read(stusb4500_dev_handle, ALERT_STATUS_1, scratch, 2);
 
     alertMask.d8 = scratch[1];
-    alertStatus.d8 = scratch[0] & ~(alertMask.d8);
+    // alertStatus.d8 = scratch[0] & ~(alertMask.d8);
+    alertStatus.d8 = scratch[0];
 
-    ESP_LOGD(TAG, "ALERT_STATUS: 0x%x", scratch[0]);
-    ESP_LOGD(TAG, "ALERT_STATUS_MASK: 0x%x", scratch[1]);
+    ESP_LOGD(TAG, "ALERT_STATUS: 0x%x 0x%x", scratch[0], scratch[1]);
+
+    // if (scratch[1] & (1 << 1)) {
+    //     stusb4500_set_irq_mask();
+    // }
 
     if (alertStatus.b.PRT_STATUS_AL) {
+
+        ESP_LOGD(TAG, "PRT_STATUS_AL");
 
         ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, PRT_STATUS, scratch, 1), exit, TAG,
                           "reading PRT_status reg");
@@ -525,7 +564,8 @@ static void read_status_registers()
 
         ESP_LOGD(TAG, "PRT_STATUS: 0x%x", _status.prtStatus.d8);
 
-        if (_status.prtStatus.b.MSG_RECEIVED == 1U) {
+        if (_status.prtStatus.b.MSG_RECEIVED) {
+            ESP_LOGD(TAG, "MSG_RECEIVED");
             USBPDMessageHeader_t header;
 
             ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_HEADER, scratch, 2), exit, TAG,
@@ -545,43 +585,56 @@ static void read_status_registers()
                 }
 
                 switch (header.b.messageType) {
-                case USBPD_DATAMSG_Source_Capabilities:
-                    ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_DATA_OBJ, scratch, byte_count), exit, TAG,
-                                      "read RX_DATA_OBJ");
+                    case USBPD_DATAMSG_Source_Capabilities:
+                        ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_DATA_OBJ, scratch, byte_count), exit, TAG,
+                                        "read RX_DATA_OBJ");
 
-                    _status.pdoSrcCount = header.b.dataObjectCount;
-                    for (uint8_t i = 0U, j = 0U; i < header.b.dataObjectCount; ++i, j += 4) {
-                        _status.pdoSrc[i].d32 = bytes_to_le32(&scratch[j]);
-                        if (0U == i) {
-                            _status.pdoSrc[i].fix.Voltage = 100U;
+                        _status.pdoSrcCount = header.b.dataObjectCount;
+                        for (uint8_t i = 0U, j = 0U; i < header.b.dataObjectCount; ++i, j += 4) {
+                            _status.pdoSrc[i].d32 = bytes_to_le32(&scratch[j]);
+                            if (0U == i) {
+                                _status.pdoSrc[i].fix.Voltage = 100U;
+                            }
+                            PDO_init(&_srcPDO[i], i + 1, _status.pdoSrc[i].fix.Voltage * 50U,
+                                    _status.pdoSrc[i].fix.Max_Operating_Current * 10U, 0);
                         }
-                        PDO_init(&_srcPDO[i], i + 1, _status.pdoSrc[i].fix.Voltage * 50U,
-                                 _status.pdoSrc[i].fix.Max_Operating_Current * 10U, 0);
-                    }
 
-                    _state.srcPDORequesting = 0U;
-                    ++(_state.srcPDOReceived);
-                    break;
-                default:
-                    break;
+                        _state.srcPDORequesting = 0U;
+                        ++(_state.srcPDOReceived);
+                        break;
+                    default:
+                        break;
                 }
             }
         }
+    }
+
+
+    if (alertStatus.b.CC_DETECTION_STATUS_AL) {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, PORT_STATUS_TRANS, scratch, 2);
+        _status.ccDetectionStatus.d8 = scratch[1];
+
+        if (scratch[0] & STUSBMASK_ATTACH_STATUS_TRANS) {
+            ESP_LOGD(TAG, "CC attachement transaction");
+            stusb4500_set_irq_mask();
+        }
+    }
+
+    if (alertStatus.b.MONITORING_STATUS_AL) {
+        // ESP_LOGD(TAG, "read Monitoring Status");
+        i2c_bitaxe_register_read(stusb4500_dev_handle, TYPEC_MONITORING_STATUS_0, scratch, 2);
+        // ESP_LOGD(TAG, "Monitoring Status: 0x%x 0x%x", scratch[0], scratch[1]);
+        _status.monitoringStatus.d8 = scratch[1];
     }
 
     // always read & update CC attachement status
     i2c_bitaxe_register_read(stusb4500_dev_handle, CC_STATUS, scratch, 1);
     _status.ccStatus.d8 = scratch[0];
 
-    if (alertStatus.b.MONITORING_STATUS_AL) {
-        i2c_bitaxe_register_read(stusb4500_dev_handle, TYPEC_MONITORING_STATUS_0, scratch, 2);
-        ESP_LOGD(TAG, "Monitoring Status: 0x%x 0x%x", scratch[0], scratch[1]);
-        _status.monitoringStatus.d8 = scratch[1];
-    }
-
     if (alertStatus.b.HW_FAULT_STATUS_AL) {
+        // ESP_LOGD(TAG, "read HW Fault Status");
         i2c_bitaxe_register_read(stusb4500_dev_handle, CC_HW_FAULT_STATUS_0, scratch, 2);
-        ESP_LOGD(TAG, "CC_HW_FAULT Status: 0x%x 0x%x", scratch[0], scratch[1]);
+        // ESP_LOGD(TAG, "CC_HW_FAULT Status: 0x%x 0x%x", scratch[0], scratch[1]);
         _status.hwFaultStatus.d8 = scratch[1];
     }
 
@@ -627,24 +680,40 @@ exit:
 
 static void stusb4500_task(void * params)
 {
-    const TickType_t xBlockTime = pdMS_TO_TICKS(500);
+    const TickType_t xBlockTime = pdMS_TO_TICKS(3000);
     uint32_t ulNotifiedValue;
     esp_err_t ret;
 
+    int num_resets = 0;
+
     for (;;) {
 
-        ulNotifiedValue = ulTaskNotifyTake(pdTRUE, xBlockTime);
-
-        if (ulNotifiedValue & TASK_NOTIFY_ISR_ALART) {
+        ulNotifiedValue = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        // ESP_LOGI(TAG, "Alert received: %ld", ulNotifiedValue);
+        while(ulNotifiedValue) {
+            ulNotifiedValue--;
             read_status_registers();
         }
+        
+
+        // if (ulNotifiedValue & TASK_NOTIFY_ISR_ALART) {
+            
+        // }
+
+        if (num_resets == 0) {
+            num_resets++;
+            // vTaskDelay(pdMS_TO_TICKS(100));
+            // stusb4500_sw_reset();
+
+            
+            // stusb4500_sendPDCableReset();
+        }
+        
     }
 }
 
 esp_err_t STUSB4500_init()
 {
-
-    vTaskDelay(pdMS_TO_TICKS(1000));
 
     ESP_LOGI(TAG, "Initializing STUSB4500");
     if (i2c_bitaxe_add_device(STUSB4500_I2CADDR_DEFAULT, &stusb4500_dev_handle, TAG) != ESP_OK) {
@@ -657,13 +726,14 @@ esp_err_t STUSB4500_init()
         return ESP_FAIL;
     }
 
-    xTaskCreate(stusb4500_task, TAG, 4096, NULL, 10, &taskHandle);
+    xTaskCreate(stusb4500_task, TAG, 4096, NULL, 24, &taskHandle);
 
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << ALERT_PIN),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .intr_type = GPIO_INTR_NEGEDGE,
+        // .intr_type = GPIO_INTR_LOW_LEVEL,
     };
     gpio_config(&io_conf);
 
@@ -685,9 +755,15 @@ esp_err_t STUSB4500_init()
     CableStatus_t cable = stusb4500_cableStatus();
     if (CABLE_CONNECTED(cable)) {
         ESP_LOGI(TAG, "Cable connected");
-        vTaskDelay(pdMS_TO_TICKS(100));
+        stusb4500_setPDOSnkCount(1);
         stusb4500_updatePDOSrc();
     }
+
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    stusb4500_updatePDOSnk();
+    stusb4500_updateRDOSnk();
+    stusb4500_updatePrtStatus();
 
     // sPower_ready_sem = xSemaphoreCreateBinary();
 
@@ -717,6 +793,8 @@ esp_err_t STUSB4500_init()
 
     // stusb4500_createFixedPDO(5000, 500);
     // stusb4500_setPDOCount(1);
+
+    STUSB4500_wait_for_power_ready();
 
     return ESP_OK;
 }
