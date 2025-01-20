@@ -29,13 +29,6 @@
 
 #define ESP_INTR_FLAG_DEFAULT 0
 
-// convert value at addr to little-endian (16-bit)
-#define LE_u16(addr) (((((uint16_t) (*(((uint8_t *) (addr)) + 1)))) + (((uint16_t) (*(((uint8_t *) (addr)) + 0))) << 8)))
-
-// convert value at addr to little-endian (32-bit)
-#define LE_u32(addr)                                                                                                               \
-    (((((uint32_t) (*(((uint8_t *) (addr)) + 3)))) + (((uint32_t) (*(((uint8_t *) (addr)) + 2))) << 8) +                           \
-      (((uint32_t) (*(((uint8_t *) (addr)) + 1))) << 16) + (((uint32_t) (*(((uint8_t *) (addr)) + 0))) << 24)))
 
 #define CABLE_CONNECTED(c) ((CC1Connected == (c)) || (CC2Connected == (c)))
 
@@ -78,6 +71,50 @@ void stusb4500_waitUntilReady(void)
     }
 }
 
+static inline uint16_t bytes_to_le16(uint8_t * bytes)
+{
+    return (uint16_t) bytes[0] | ((uint16_t) bytes[1] << 8);
+}
+
+static inline void le16_to_bytes(uint16_t value, uint8_t * bytes)
+{
+    bytes[0] = value & 0xff;
+    bytes[1] = (value >> 8) & 0xff;
+}
+
+static inline uint32_t bytes_to_le32(uint8_t * bytes)
+{
+    return (uint32_t) bytes[0] | ((uint32_t) bytes[1] << 8) | ((uint32_t) bytes[2] << 16) | ((uint32_t) bytes[3] << 24);
+}
+
+static inline void le32_to_bytes(uint32_t value, uint8_t * bytes)
+{
+    bytes[0] = value & 0xff;
+    bytes[1] = (value >> 8) & 0xff;
+    bytes[2] = (value >> 16) & 0xff;
+    bytes[3] = (value >> 24) & 0xff;
+}
+
+static void print_pdo(USB_PD_SNK_PDO_TypeDef pdo){
+    switch (pdo.fix.FixedSupply) {
+        case PDO_SNK_FIX_FIXED: // fixed supply
+            ESP_LOGI(TAG, "Fixed Supply PDO: %d mV %d mA", pdo.fix.Voltage * 50, pdo.fix.Operational_Current * 10);
+            break;
+        
+        case PDO_SNK_FIX_VARIABLE: // Variable Supply
+            ESP_LOGI(TAG, "Variable Supply PDO: (%d-%d mV) %d mA", pdo.var.Min_Voltage * 50, pdo.var.Max_Voltage * 50, pdo.var.Operating_Current * 10);
+            break;
+
+        case PDO_SNK_FIX_BATTERY: // Battery Supply
+            ESP_LOGI(TAG, "Battery Supply PDO: (%d-%d mV) %d mW", pdo.bat.Min_Voltage * 50, pdo.bat.Max_Voltage * 50, pdo.bat.Operating_Power * 250);
+            break;
+
+        default:
+            ESP_LOGE(TAG, "Unknown PDO type %d", pdo.fix.FixedSupply);
+            break;
+    }
+}
+
 void stusb4500_updatePDOSnk(void)
 {
 #define BUFF_SZ NVM_SNK_PDO_MAX * sizeof(USB_PD_SNK_PDO_TypeDef)
@@ -87,22 +124,20 @@ void stusb4500_updatePDOSnk(void)
     stusb4500_waitUntilReady();
 
     i2c_bitaxe_register_read(stusb4500_dev_handle, DPM_PDO_NUMB, &pdoCount, 1);
+    pdoCount &= 0x03;
 
     i2c_bitaxe_register_read(stusb4500_dev_handle, DPM_SNK_PDO1, pdo, BUFF_SZ);
 
-    ESP_LOGD(TAG, "PDO count: %d buf_sz: %d", pdoCount, BUFF_SZ);
+    ESP_LOGD(TAG, "PDO count: %d", pdoCount);
     ESP_LOG_BUFFER_HEX_LEVEL(TAG, pdo, BUFF_SZ, ESP_LOG_DEBUG);
 
     _status.pdoSnkCount = pdoCount;
     for (uint8_t i = 0, j = 0; i < NVM_SNK_PDO_MAX; i++, j += 4) {
         if (i < pdoCount) {
-            _status.pdoSnk[i].d32 = LE_u32(&pdo[j]);
-            PDO_init(&_snkPDO[i], i + 1, _status.pdoSnk[i].fix.Voltage * 50U, _status.pdoSnk[i].fix.Operational_Current * 10U, 0);
-
-            ESP_LOGD(TAG, "PDO %d: %d mV %d mA", i, _snkPDO[i].voltage_mV, _snkPDO[i].current_mA);
+            _status.pdoSnk[i].d32 = bytes_to_le32(&pdo[j]);
+            print_pdo(_status.pdoSnk[i]);
         } else {
             _status.pdoSnk[i].d32 = 0U;
-            PDO_init_zero(&_snkPDO[i]);
         }
     }
 #undef BUFF_SZ
@@ -129,10 +164,7 @@ void stusb4500_setPDOSnk(PDO_t pdo)
     def.fix.Operational_Current = pdo.current_mA / 10U;
 
     buf[0] = address;
-    buf[1] = def.d32 && 0xff;
-    buf[2] = (def.d32 >> 8) && 0xff;
-    buf[3] = (def.d32 >> 16) && 0xff;
-    buf[4] = (def.d32 >> 24) && 0xff;
+    le32_to_bytes(def.d32, &buf[1]);
 
     i2c_bitaxe_register_write_bytes(stusb4500_dev_handle, buf, 5U);
 }
@@ -498,7 +530,7 @@ static void read_status_registers()
 
             ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_HEADER, scratch, 2), exit, TAG,
                               "reading RX_HEADER");
-            header.d16 = LE_u16(scratch);
+            header.d16 = bytes_to_le16(scratch);
 
             ESP_LOGD(TAG, "RX_HEADER: 0x%x num: %d", header.d16, header.b.dataObjectCount);
 
@@ -519,7 +551,7 @@ static void read_status_registers()
 
                     _status.pdoSrcCount = header.b.dataObjectCount;
                     for (uint8_t i = 0U, j = 0U; i < header.b.dataObjectCount; ++i, j += 4) {
-                        _status.pdoSrc[i].d32 = LE_u32(&scratch[j]);
+                        _status.pdoSrc[i].d32 = bytes_to_le32(&scratch[j]);
                         if (0U == i) {
                             _status.pdoSrc[i].fix.Voltage = 100U;
                         }

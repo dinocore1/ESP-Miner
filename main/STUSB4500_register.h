@@ -525,7 +525,7 @@ typedef union
     uint8_t  Unconstrained_Power        :  1;
     uint8_t  Higher_Capability          :  1;
     uint8_t  Dual_Role_Power            :  1;
-    uint8_t  Fixed_Supply               :  2;
+    uint8_t  FixedSupply               :  2;
   } __attribute__((packed)) fix;
   struct
   {
