@@ -1,5 +1,6 @@
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <driver/gpio.h>
 #include <esp_check.h>
@@ -14,7 +15,6 @@
 #include "STUSB4500_register.h"
 #include "STUSB4500.h"
 #include "STUSB4500_def.h"
-
 
 #include "i2c_bitaxe.h"
 
@@ -576,19 +576,19 @@ static void read_status_registers()
 
             if (header.b.dataObjectCount > 0) {
 
-                ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_BYTE_CNT, scratch, 1), exit, TAG,
-                                  "read RX_BYTE_CNT");
+                ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_BYTE_CNT, scratch, 1), done, TAG,
+                            "read RX_BYTE_CNT");
                 uint8_t byte_count = scratch[0];
                 if (byte_count != header.b.dataObjectCount * 4) {
                     ESP_LOGE(TAG, "byte count mismatch: %d != %d", byte_count, header.b.dataObjectCount * 4);
-                    goto exit;
-                }
+                    goto done;
+                }    
+
+                ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_DATA_OBJ, scratch, byte_count), done, TAG,
+                                "read RX_DATA_OBJ");
 
                 switch (header.b.messageType) {
-                    case USBPD_DATAMSG_Source_Capabilities:
-                        ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_DATA_OBJ, scratch, byte_count), exit, TAG,
-                                        "read RX_DATA_OBJ");
-
+                    case USBPD_DATAMSG_Source_Capabilities: {
                         _status.pdoSrcCount = header.b.dataObjectCount;
                         for (uint8_t i = 0U, j = 0U; i < header.b.dataObjectCount; ++i, j += 4) {
                             _status.pdoSrc[i].d32 = bytes_to_le32(&scratch[j]);
@@ -601,11 +601,33 @@ static void read_status_registers()
 
                         _state.srcPDORequesting = 0U;
                         ++(_state.srcPDOReceived);
+                        
                         break;
-                    default:
-                        break;
+                    }
+                }
+            } else {
+                // Control Message
+                switch (header.b.messageType) {
+
+                case USBPD_CTRLMSG_Accept:
+                    ESP_LOGD(TAG, "USBPD_CTRLMSG_Accept");
+                    // PostProcess_Msg_Accept++;
+                    break;
+                    
+                case USBPD_CTRLMSG_Reject:
+                    ESP_LOGD(TAG, "USBPD_CTRLMSG_Reject");
+                    // PostProcess_Msg_Reject++;
+                    break;
+                    
+                case USBPD_CTRLMSG_PS_RDY:
+                    ESP_LOGD(TAG, "USBPD_CTRLMSG_Reject");
+                    // PostProcess_PSRDY_Received++;
+                    break;
+ 
                 }
             }
+
+            done:          
         }
     }
 
@@ -712,6 +734,195 @@ static void stusb4500_task(void * params)
     }
 }
 
+/*
+FTP Registers
+o FTP_CUST_PWR (0x9E b(7), ftp_cust_pwr_i in RTL); power for FTP
+o FTP_CUST_RST_N (0x9E b(6), ftp_cust_reset_n_i in RTL); reset for FTP
+o FTP_CUST_REQ (0x9E b(4), ftp_cust_req_i in RTL); request bit for FTP operation
+o FTP_CUST_SECT (0x9F (2:0), ftp_cust_sect1_i in RTL); for customer to select between sector 0 to 4 for read/write operations (functions as lowest address bit to FTP, remainders are zeroed out)
+o FTP_CUST_SER_MASK[4:0] (0x9F b(7:4), ftp_cust_ser_i in RTL); customer Sector Erase Register; controls erase of sector 0 (00001), sector 1 (00010), sector 2 (00100), sector 3 (01000), sector 4 (10000) ) or all (11111).
+o FTP_CUST_OPCODE_MASK[2:0] (0x9F b(2:0), ftp_cust_op3_i in RTL). Selects opcode sent to
+FTP. Customer Opcodes are:
+o 000 = Read sector
+o 001 = Write Program Load register (PL) with data to be written to sector 0 or 1
+o 010 = Write Sector Erase Register (SER) with data reflected by state of FTP_CUST_SER_MASK[4:0]
+o 011 = Read Program Load register (PL)
+o 100 = Read SER;
+o 101 = Erase sector 0 to 4  (depending upon the mask value which has been programmed to SER)
+o 110 = Program sector 0  to 4 (depending on FTP_CUST_SECT1)
+o 111 = Soft program sector 0 to 4 (depending upon the value which has been programmed to SER)*/
+
+static void readNVMSector(uint8_t sector, uint8_t* buf)
+{
+    i2c_bitaxe_register_read(stusb4500_dev_handle, FTP_CTRL_1, buf, 1);
+    buf[0] &= ~FTP_CUST_OPCODE;
+    buf[0] |= 0x00 & FTP_CUST_OPCODE;
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_1, buf[0]);
+
+    i2c_bitaxe_register_read(stusb4500_dev_handle, FTP_CTRL_0, buf, 1);
+    buf[0] &= ~FTP_CUST_SECT;
+    buf[0] |= (sector & FTP_CUST_SECT) | FTP_CUST_REQ;
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_0, buf[0]);
+
+    //The FTP_CUST_REQ is cleared by NVM controller when the operation is finished.
+    do {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, FTP_CTRL_0, buf, 1);
+    } while (buf[0] & FTP_CUST_REQ);
+
+    /* Sectors Data are available in RW-BUFFER @ 0x53 */
+    i2c_bitaxe_register_read(stusb4500_dev_handle, RW_BUFFER, buf, 8);
+
+}
+
+static void dumpNVM()
+{
+    uint8_t scratch[8];
+
+    // set the password
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CUST_PASSWORD_REG, FTP_CUST_PASSWORD);
+
+    //NVM Power-up Sequence
+    //After STUSB start-up sequence, the NVM is powered off.
+
+    /* NVM internal controller reset */
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_0, 0);
+
+    // Set PWR and RST_N bits
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_0, FTP_CUST_PWR | FTP_CUST_RST_N);
+
+    for(uint8_t i=0;i<5;i++) {
+        readNVMSector(i, scratch);
+        // print the hex value of the sector
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, scratch, 8, ESP_LOG_DEBUG);
+
+    }
+
+    scratch[0] = FTP_CTRL_0;
+    scratch[1] = FTP_CUST_RST_N;
+    scratch[2] = 0x00;
+    i2c_bitaxe_register_write_bytes(stusb4500_dev_handle, scratch, 3);
+
+    /* Clear Password */
+    scratch[0]= FTP_CUST_PASSWORD_REG;
+    scratch[1]= 0x00;
+    i2c_bitaxe_register_write_bytes(stusb4500_dev_handle, scratch, 2);
+    
+}
+
+uint8_t Sector0[8] = {0x00,0x00,0xFF,0xAA,0x00,0x45,0x00,0x00};
+uint8_t Sector1[8] = {0x00,0x40,0x9D,0x1C,0xF0,0x01,0x00,0xDF};
+uint8_t Sector2[8] = {0xA2,0x40,0x0F,0x06,0x32,0x00,0xFC,0xF1};
+uint8_t Sector3[8] = {0x00,0x19,0x14,0xAF,0x55,0x35,0x55,0x00};
+uint8_t Sector4[8] = {0x00,0x2D,0x90,0x21,0x43,0x00,0x60,0xF9};
+
+static void writeNVMSector(uint8_t sector, uint8_t* buf)
+{
+    uint8_t scratch[9];
+
+    // write the sector
+    scratch[0] = RW_BUFFER;
+    memcpy(&scratch[1], buf, 8);
+    i2c_bitaxe_register_write_bytes(stusb4500_dev_handle, scratch, 9);
+
+    scratch[0] = FTP_CUST_PWR | FTP_CUST_RST_N;
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_0, scratch[0]);
+
+    //NVM Program Load Register to write with the 64-bit data to be written in sector
+    scratch[0]= (WRITE_PL & FTP_CUST_OPCODE); /*Set Write to PL Opcode*/
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_1, scratch[0]);
+
+    // Load Write SER Opcode
+    scratch[0] = FTP_CUST_PWR | FTP_CUST_RST_N | FTP_CUST_REQ;
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_0, scratch[0]);
+
+    // wait for the operation to finish
+    do {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, FTP_CTRL_0, buf, 1);
+    } while (buf[0] & FTP_CUST_REQ);
+
+    
+    //NVM "Word Program" operation to write the Program Load Register in the sector to be written
+    scratch[0]= (PROG_SECTOR & FTP_CUST_OPCODE);
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_1, scratch[0]);
+
+    // Load Write SER Opcode
+    scratch[0] = (sector & FTP_CUST_SECT) | FTP_CUST_PWR | FTP_CUST_RST_N | FTP_CUST_REQ;
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_0, scratch[0]);
+
+    // wait for the operation to finish
+    do {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, FTP_CTRL_0, buf, 1);
+    } while (buf[0] & FTP_CUST_REQ);
+
+}
+
+static void writeNVM()
+{
+    uint8_t scratch[8];
+
+    // set the password
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CUST_PASSWORD_REG, FTP_CUST_PASSWORD);
+
+    // this register must be NULL for Partial Erase feature
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, RW_BUFFER, 0);
+
+
+    //NVM Power-up Sequence
+    //After STUSB start-up sequence, the NVM is powered off.
+
+    /* NVM internal controller reset */
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_0, 0);
+
+    // Set PWR and RST_N bits
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_0, FTP_CUST_PWR | FTP_CUST_RST_N);
+
+    ///// Erase Sector 0 to 4 /////
+    uint8_t erase_sectors = SECTOR_0 | SECTOR_1  | SECTOR_2 | SECTOR_3  | SECTOR_4;
+    scratch[0] = ((erase_sectors << 3) & FTP_CUST_SER) | (WRITE_SER & FTP_CUST_OPCODE);
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_1, scratch[0]);
+
+    // Load Write SER Opcode
+    scratch[0] = FTP_CUST_PWR | FTP_CUST_RST_N | FTP_CUST_REQ;
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_0, scratch[0]);
+
+    // wait for the operation to finish
+    do {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, FTP_CTRL_0, scratch, 1);
+    } while (scratch[0] & FTP_CUST_REQ);
+
+
+    //// Program //////
+    scratch[0] = SOFT_PROG_SECTOR & FTP_CUST_OPCODE;
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_1, scratch[0]);
+
+    // Load Write SER Opcode
+    scratch[0] = FTP_CUST_PWR | FTP_CUST_RST_N | FTP_CUST_REQ;
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_0, scratch[0]);
+
+    // wait for the operation to finish
+    do {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, FTP_CTRL_0, scratch, 1);
+    } while (scratch[0] & FTP_CUST_REQ);
+
+
+
+    scratch[0] = ERASE_SECTOR & FTP_CUST_OPCODE;
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_1, scratch[0]);
+
+    // Load Write SER Opcode
+    scratch[0] = FTP_CUST_PWR | FTP_CUST_RST_N | FTP_CUST_REQ;
+    i2c_bitaxe_register_write_byte(stusb4500_dev_handle, FTP_CTRL_0, scratch[0]);
+
+    // wait for the operation to finish
+    do {
+        i2c_bitaxe_register_read(stusb4500_dev_handle, FTP_CTRL_0, scratch, 1);
+    } while (scratch[0] & FTP_CUST_REQ);
+
+
+    writeNVMSector(0, Sector0);
+
+}
+
 esp_err_t STUSB4500_init()
 {
 
@@ -725,6 +936,9 @@ esp_err_t STUSB4500_init()
         ESP_LOGE(TAG, "STUSB4500 not found");
         return ESP_FAIL;
     }
+
+    writeNVM();
+    // dumpNVM();
 
     xTaskCreate(stusb4500_task, TAG, 4096, NULL, 24, &taskHandle);
 
