@@ -175,8 +175,8 @@ void stusb4500_setPDOSnk(PDO_t pdo)
 void stusb4500_updatePDOSrc()
 {
     stusb4500_sendPDCableReset();
-    stusb4500_waitUntilReady();
-    stusb4500_clearAlerts(true);
+    // stusb4500_waitUntilReady();
+    // stusb4500_clearAlerts(true);
 
     // for(int i=0;i<500;i++) {
     //     read_status_registers();
@@ -548,7 +548,7 @@ static void read_status_registers()
     // alertStatus.d8 = scratch[0] & ~(alertMask.d8);
     alertStatus.d8 = scratch[0];
 
-    ESP_LOGD(TAG, "ALERT_STATUS: 0x%x 0x%x", scratch[0], scratch[1]);
+    // ESP_LOGD(TAG, "ALERT_STATUS: 0x%x 0x%x", scratch[0], scratch[1]);
 
     // if (scratch[1] & (1 << 1)) {
     //     stusb4500_set_irq_mask();
@@ -556,45 +556,53 @@ static void read_status_registers()
 
     if (alertStatus.b.PRT_STATUS_AL) {
 
-        ESP_LOGD(TAG, "PRT_STATUS_AL");
+        // ESP_LOGD(TAG, "PRT_STATUS_AL");
 
         ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, PRT_STATUS, scratch, 1), exit, TAG,
                           "reading PRT_status reg");
         _status.prtStatus.d8 = scratch[0];
 
-        ESP_LOGD(TAG, "PRT_STATUS: 0x%x", _status.prtStatus.d8);
+        // ESP_LOGD(TAG, "PRT_STATUS: 0x%x", _status.prtStatus.d8);
 
         if (_status.prtStatus.b.MSG_RECEIVED) {
-            ESP_LOGD(TAG, "MSG_RECEIVED");
+            // ESP_LOGD(TAG, "MSG_RECEIVED");
             USBPDMessageHeader_t header;
 
             ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_HEADER, scratch, 2), exit, TAG,
                               "reading RX_HEADER");
             header.d16 = bytes_to_le16(scratch);
 
-            ESP_LOGD(TAG, "RX_HEADER: 0x%x num: %d", header.d16, header.b.dataObjectCount);
+            // ESP_LOGD(TAG, "RX_HEADER: 0x%x num: %d", header.d16, header.b.dataObjectCount);
 
             if (header.b.dataObjectCount > 0) {
 
-                ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_BYTE_CNT, scratch, 1), done, TAG,
-                            "read RX_BYTE_CNT");
-                uint8_t byte_count = scratch[0];
-                if (byte_count != header.b.dataObjectCount * 4) {
-                    ESP_LOGE(TAG, "byte count mismatch: %d != %d", byte_count, header.b.dataObjectCount * 4);
-                    goto done;
-                }    
+                // ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_BYTE_CNT, scratch, 1), done, TAG,
+                //             "read RX_BYTE_CNT");
+                // uint8_t byte_count = scratch[0];
+                // if (byte_count != header.b.dataObjectCount * 4) {
+                //     ESP_LOGE(TAG, "byte count mismatch: %d != %d", byte_count, header.b.dataObjectCount * 4);
+                //     goto done;
+                // }    
 
-                ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_DATA_OBJ, scratch, byte_count), done, TAG,
-                                "read RX_DATA_OBJ");
+                // ESP_GOTO_ON_ERROR(i2c_bitaxe_register_read(stusb4500_dev_handle, RX_DATA_OBJ, scratch, byte_count), done, TAG,
+                //                 "read RX_DATA_OBJ");
+
+                // // hex dump the scratch buffer
+                // ESP_LOG_BUFFER_HEX_LEVEL(TAG, scratch, byte_count, ESP_LOG_DEBUG);
 
                 switch (header.b.messageType) {
                     case USBPD_DATAMSG_Source_Capabilities: {
+                        i2c_bitaxe_register_read(stusb4500_dev_handle, RX_DATA_OBJ, scratch, header.b.dataObjectCount * 4);
                         _status.pdoSrcCount = header.b.dataObjectCount;
                         for (uint8_t i = 0U, j = 0U; i < header.b.dataObjectCount; ++i, j += 4) {
                             _status.pdoSrc[i].d32 = bytes_to_le32(&scratch[j]);
                             if (0U == i) {
                                 _status.pdoSrc[i].fix.Voltage = 100U;
+                                _status.pdoSrc[i].fix.FixedSupply = 0U;
                             }
+                            USB_PD_SNK_PDO_TypeDef v = { .d32 = _status.pdoSrc[i].d32 };
+                            ESP_LOGI(TAG, "Source PDO %d", i);
+                            print_pdo(v);
                             PDO_init(&_srcPDO[i], i + 1, _status.pdoSrc[i].fix.Voltage * 50U,
                                     _status.pdoSrc[i].fix.Max_Operating_Current * 10U, 0);
                         }
@@ -626,8 +634,7 @@ static void read_status_registers()
  
                 }
             }
-
-            done:          
+   
         }
     }
 
@@ -920,6 +927,10 @@ static void writeNVM()
 
 
     writeNVMSector(0, Sector0);
+    writeNVMSector(1, Sector1);
+    writeNVMSector(2, Sector2);
+    writeNVMSector(3, Sector3);
+    writeNVMSector(4, Sector4);
 
 }
 
@@ -937,7 +948,7 @@ esp_err_t STUSB4500_init()
         return ESP_FAIL;
     }
 
-    writeNVM();
+    // writeNVM();
     // dumpNVM();
 
     xTaskCreate(stusb4500_task, TAG, 4096, NULL, 24, &taskHandle);
@@ -973,11 +984,11 @@ esp_err_t STUSB4500_init()
         stusb4500_updatePDOSrc();
     }
 
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    // vTaskDelay(pdMS_TO_TICKS(2000));
 
-    stusb4500_updatePDOSnk();
-    stusb4500_updateRDOSnk();
-    stusb4500_updatePrtStatus();
+    // stusb4500_updatePDOSnk();
+    // stusb4500_updateRDOSnk();
+    // stusb4500_updatePrtStatus();
 
     // sPower_ready_sem = xSemaphoreCreateBinary();
 
