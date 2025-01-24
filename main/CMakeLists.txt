@@ -54,6 +54,10 @@ PRIV_REQUIRES
     "esp_driver_i2c"
 )
 
+if(CONFIG_USBPD)
+    target_sources(${COMPONENT_TARGET} PRIVATE "usbpd.c")
+endif()
+
 if(CONFIG_STUSB4500)
     target_sources(${COMPONENT_TARGET} PRIVATE "STUSB4500.c")
 endif()

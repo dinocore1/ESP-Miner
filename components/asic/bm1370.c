@@ -233,6 +233,9 @@ static uint8_t _send_init(uint64_t frequency, uint16_t asic_count)
         }
     }
     ESP_LOGI(TAG, "%i chip(s) detected on the chain, expected %i", chip_counter, asic_count);
+    if (chip_counter == 0) {
+        return chip_counter;
+    }
 
     // set version mask
     BM1370_set_version_mask(STRATUM_DEFAULT_VERSION_MASK);

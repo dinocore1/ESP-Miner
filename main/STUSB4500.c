@@ -50,7 +50,7 @@ static void stusb4500_task(void * params);
 
 static volatile uint16_t alert_count = 0;
 
-static volatile uint8_t is_power_ready = 0;
+static volatile bool is_power_ready = false;
 
 static void read_status_registers();
 
@@ -224,6 +224,8 @@ void stusb4500_updateRDOSnk()
         }
 
         ESP_LOGD(TAG, "RDO: %d %d mV %d mA %d mA", _snkRDO.number, _snkRDO.voltage_mV, _snkRDO.current_mA, _snkRDO.maxCurrent_mA);
+
+        is_power_ready = true;
     } else {
         PDO_init_zero(&_snkRDO);
         ESP_LOGD(TAG, "no RDO");
@@ -348,7 +350,7 @@ static void IRAM_ATTR alert_isr_handler(void * arg)
 
 void STUSB4500_wait_for_power_ready()
 {
-    while (is_power_ready == 0) {
+    while (is_power_ready == false) {
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
@@ -644,7 +646,7 @@ static void read_status_registers()
         _status.ccDetectionStatus.d8 = scratch[1];
 
         if (scratch[0] & STUSBMASK_ATTACH_STATUS_TRANS) {
-            ESP_LOGD(TAG, "CC attachement transaction");
+            // ESP_LOGD(TAG, "CC attachement transaction");
             stusb4500_set_irq_mask();
         }
     }
@@ -977,12 +979,12 @@ esp_err_t STUSB4500_init()
     stusb4500_updatePrtStatus();
     stusb4500_clearPDOSrc();
 
-    CableStatus_t cable = stusb4500_cableStatus();
-    if (CABLE_CONNECTED(cable)) {
-        ESP_LOGI(TAG, "Cable connected");
-        stusb4500_setPDOSnkCount(1);
-        stusb4500_updatePDOSrc();
-    }
+    // CableStatus_t cable = stusb4500_cableStatus();
+    // if (CABLE_CONNECTED(cable)) {
+    //     ESP_LOGI(TAG, "Cable connected");
+    //     stusb4500_setPDOSnkCount(1);
+    //     stusb4500_updatePDOSrc();
+    // }
 
     // vTaskDelay(pdMS_TO_TICKS(2000));
 
@@ -1019,9 +1021,17 @@ esp_err_t STUSB4500_init()
     // stusb4500_createFixedPDO(5000, 500);
     // stusb4500_setPDOCount(1);
 
-    STUSB4500_wait_for_power_ready();
-
     return ESP_OK;
+}
+
+void usbpd_init()
+{
+    STUSB4500_init();
+}
+
+void usbpd_wait_for_power_read()
+{
+    STUSB4500_wait_for_power_ready();
 }
 
 void USBPDStatus_init(USBPDStatus_t * status)

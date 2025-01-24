@@ -24,9 +24,9 @@
 
 #define ESP_INTR_FLAG_DEFAULT  0
 
-#ifdef CONFIG_STUSB4500
-#include "STUSB4500.h"
-#endif //CONFIG_STUSB4500
+#ifdef CONFIG_USBPD
+#include "usbpd.h"
+#endif //CONFIG_USBPD
 
 static GlobalState GLOBAL_STATE = {
     .extranonce_str = NULL, 
@@ -55,10 +55,6 @@ void app_main(void)
     //Init ADC
     ADC_init();
 
-#ifdef CONFIG_STUSB4500
-    STUSB4500_init();
-#endif // CONFIG_STUSB4500
-
     //initialize the ESP32 NVS
     if (NVSDevice_init() != ESP_OK){
         ESP_LOGE(TAG, "Failed to init NVS");
@@ -70,6 +66,11 @@ void app_main(void)
         ESP_LOGE(TAG, "Failed to parse NVS config");
         return;
     }
+
+#ifdef CONFIG_USBPD
+    usbpd_init();
+    usbpd_wait_for_power_ready();
+#endif // CONFIG_USBPD
 
     // Optionally hold the boot button
     bool pressed = gpio_get_level(CONFIG_GPIO_BUTTON_BOOT) == 0; // LOW when pressed

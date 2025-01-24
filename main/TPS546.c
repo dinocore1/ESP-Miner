@@ -740,6 +740,10 @@ void TPS546_show_voltage_settings(void)
     f_value = slinear11_2_float(u16_value);
     ESP_LOGI(TAG, "VIN OFF set to: %.2f", f_value);
 
+    smb_read_word(PMBUS_VIN_OV_FAULT_LIMIT, &u16_value);
+    f_value = slinear11_2_float(u16_value);
+    ESP_LOGI(TAG, "VIN_OV_FAULT_LIMIT set to: %.2f", f_value);
+
     /* VOUT_MAX */
     smb_read_word(PMBUS_VOUT_MAX, &u16_value);
     f_value = ulinear16_2_float(u16_value);
