@@ -344,12 +344,6 @@ void self_test(void * pvParameters)
         tests_done(GLOBAL_STATE, TESTS_FAILED);
     }
 
-    //Voltage Regulator Testing
-    if (test_voltage_regulator(GLOBAL_STATE) != ESP_OK) {
-        ESP_LOGE(TAG, "Voltage Regulator test failed!");
-        tests_done(GLOBAL_STATE, TESTS_FAILED);
-    }
-
     //test for number of ASICs
     if (SERIAL_init() != ESP_OK) {
         ESP_LOGE(TAG, "SERIAL init failed!");
@@ -364,13 +358,12 @@ void self_test(void * pvParameters)
         char error_buf[20];
         snprintf(error_buf, 20, "ASIC:FAIL %d CHIPS", chips_detected);
         display_msg(error_buf, GLOBAL_STATE);
-        while (true) {
-            float voltage = TPS546_get_vout();
-            float current = TPS546_get_iout();
-            float power = voltage * current;
-            ESP_LOGI(TAG, "Power: %f, Voltage: %f, Current %f", power, voltage, current);
-            vTaskDelay(pdMS_TO_TICKS(500));
-        }
+        tests_done(GLOBAL_STATE, TESTS_FAILED);
+    }
+
+    //Voltage Regulator Testing
+    if (test_voltage_regulator(GLOBAL_STATE) != ESP_OK) {
+        ESP_LOGE(TAG, "Voltage Regulator test failed!");
         tests_done(GLOBAL_STATE, TESTS_FAILED);
     }
 
